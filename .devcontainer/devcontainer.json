@@ -1,13 +1,9 @@
 {
-  "name": "Flutter Project",
-  // Use a base image that includes common tools
-  "image": "mcr.microsoft.com/devcontainers/base:ubuntu",
-
-  "features": {
-    // This is the key part: it installs the Flutter SDK
-    "ghcr.io/devcontainers/features/flutter:1": {}
+  "name": "Flutter",
+  // Configure a standard Ubuntu image with Flutter
+  "build": {
+    "dockerfile": "Dockerfile"
   },
-
   "customizations": {
     "vscode": {
       // Install the essential Flutter and Dart extensions
@@ -17,8 +13,6 @@
       ]
     }
   },
-
-  // Forward the port for the web debugger
-  "forwardPorts": [8080],
-  "postCreateCommand": "sudo chown -R $(whoami) /usr/local/flutter"
+  // Check flutter readiness
+  "postCreateCommand": "flutter doctor"
 }
