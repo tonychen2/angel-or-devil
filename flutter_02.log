@@ -1,0 +1,87 @@
+Flutter crash report.
+Please report a bug at https://github.com/flutter/flutter/issues.
+
+## command
+
+flutter run -d web-server
+
+## exception
+
+StateError: Bad state: No element
+
+```
+#0      List.first (dart:core-patch/growable_array.dart:352:5)
+#1      ResidentWebRunner.restart (package:flutter_tools/src/isolated/resident_web_runner.dart:512:26)
+<asynchronous suspension>
+#2      TerminalHandler._commonTerminalInputHandler (package:flutter_tools/src/resident_runner.dart:1752:40)
+<asynchronous suspension>
+#3      TerminalHandler.processTerminalInput (package:flutter_tools/src/resident_runner.dart:1807:7)
+<asynchronous suspension>
+```
+
+## flutter doctor
+
+```
+[32m[✓][39m Flutter (Channel master, 3.36.0-1.0.pre-364, on Ubuntu
+    24.04.2 LTS 6.8.0-1030-azure, locale en_US.UTF-8) [656ms]
+    [32m•[39m Flutter version 3.36.0-1.0.pre-364 on channel master at
+      /home/vscode/flutter
+    [32m•[39m Upstream repository https://github.com/flutter/flutter.git
+    [32m•[39m Framework revision b81178471b (2 days ago), 2025-08-30
+      23:01:31 -0400
+    [32m•[39m Engine revision b81178471b
+    [32m•[39m Dart version 3.10.0 (build 3.10.0-158.0.dev)
+    [32m•[39m DevTools version 2.50.0
+    [32m•[39m Feature flags: enable-web, enable-linux-desktop,
+      enable-macos-desktop, enable-windows-desktop,
+      enable-android, enable-ios, cli-animations,
+      enable-native-assets, omit-legacy-version-file,
+      enable-lldb-debugging
+
+[31m[✗][39m Android toolchain - develop for Android devices [45ms]
+    [31m✗[39m Unable to locate Android SDK.
+      Install Android Studio from:
+      https://developer.android.com/studio/index.html
+      On first launch it will assist you in installing the
+      Android SDK components.
+      (or visit https://flutter.dev/to/linux-android-setup for
+      detailed instructions).
+      If the Android SDK has been installed to a custom
+      location, please use
+      `flutter config --android-sdk` to update to that location.
+
+
+[32m[✓][39m Chrome - develop for the web [22ms]
+    [32m•[39m Chrome at google-chrome
+
+[31m[✗][39m Linux toolchain - develop for Linux desktop [45ms]
+    [31m✗[39m clang++ is required for Linux development.
+      It is likely available from your distribution (e.g.: apt
+      install clang), or can be downloaded from
+      https://releases.llvm.org/
+    [31m✗[39m CMake is required for Linux development.
+      It is likely available from your distribution (e.g.: apt
+      install cmake), or can be downloaded from
+      https://cmake.org/download/
+    [31m✗[39m ninja is required for Linux development.
+      It is likely available from your distribution (e.g.: apt
+      install ninja-build), or can be downloaded from
+      https://github.com/ninja-build/ninja/releases
+    [31m✗[39m pkg-config is required for Linux development.
+      It is likely available from your distribution (e.g.: apt
+      install pkg-config), or can be downloaded from
+      https://www.freedesktop.org/wiki/Software/pkg-config/
+
+[32m[✓][39m Connected device (3 available) [93ms]
+    [32m•[39m Linux (desktop)  • linux      • linux-x64      • Ubuntu
+      24.04.2 LTS 6.8.0-1030-azure
+    [32m•[39m Web Server (web) • web-server • web-javascript • Flutter
+      Tools
+    [32m•[39m Chrome (web)     • chrome     • web-javascript • Google
+      Chrome 139.0.7258.154
+
+[32m[✓][39m Network resources [207ms]
+    [32m•[39m All expected network resources are available.
+
+[33m![39m Doctor found issues in 2 categories.
+```
