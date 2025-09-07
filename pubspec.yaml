@@ -33,6 +33,7 @@ dependencies:
   hive: ^2.2.3
   hive_flutter: ^1.1.0
   google_fonts: ^6.0.0
+  flutter_svg: ^2.0.7
   cupertino_icons: ^1.0.8
   flutter_lints: ^6.0.0
 
@@ -54,9 +55,9 @@ flutter:
   uses-material-design: true
 
   # To add assets to your application, add an assets section, like this:
-  # assets:
-  #   - images/a_dot_burr.jpeg
-  #   - images/a_dot_ham.jpeg
+  assets:
+    - assets/angel.svg
+    - assets/devil.svg
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images

@@ -3,3 +3,18 @@ google-chrome-stable_current_amd64.deb
 
 # Ignore build artifacts
 .dart_tool/
+build/
+
+# Flutter log files
+flutter_*.log
+
+# IDE and OS files
+*.iml
+*.swp
+*.swo
+*.DS_Store
+.idea/
+.vscode/
+
+# Other local files
+pubspec.lock

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'models/entry.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -19,24 +20,86 @@ class AngelDevilApp extends StatelessWidget {
     return MaterialApp(
       title: 'Angel or Devil',
       theme: ThemeData(
-        scaffoldBackgroundColor: const Color(
-          0xFFF8F3E3,
-        ), // Papyrus-like background
-        primaryColor: const Color(0xFF8B6F4E), // Brown
+        scaffoldBackgroundColor: const Color(0xFFF8F3E3),
+        primaryColor: const Color(0xFF8B6F4E),
         appBarTheme: const AppBarTheme(
           backgroundColor: Color(0xFF8B6F4E),
           foregroundColor: Color(0xFFF8F3E3),
           elevation: 0,
         ),
-        textTheme:
-            GoogleFonts.patrickHandTextTheme(), // Handwritten casual font
+        textTheme: GoogleFonts.patrickHandTextTheme(),
         fontFamily: GoogleFonts.patrickHand().fontFamily,
         colorScheme: ColorScheme.fromSwatch().copyWith(
           primary: const Color(0xFF8B6F4E),
           secondary: const Color(0xFF8B6F4E),
         ),
       ),
-      home: const CalendarViewScreen(),
+      home: const MainTabView(),
+    );
+  }
+}
+
+class MainTabView extends StatefulWidget {
+  const MainTabView({super.key});
+
+  @override
+  State<MainTabView> createState() => _MainTabViewState();
+}
+
+class _MainTabViewState extends State<MainTabView> {
+  int _selectedIndex = 0;
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: IndexedStack(
+        index: _selectedIndex,
+        children: const [
+          CalendarViewScreen(),
+          InsightPlaceholderScreen(),
+        ],
+      ),
+      bottomNavigationBar: BottomNavigationBar(
+        currentIndex: _selectedIndex,
+        onTap: (index) {
+          setState(() {
+            _selectedIndex = index;
+          });
+        },
+        items: const [
+          BottomNavigationBarItem(
+            icon: Icon(Icons.calendar_today),
+            label: 'Calendar',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.bar_chart),
+            label: 'Insight',
+          ),
+        ],
+        selectedItemColor: Color(0xFF8B6F4E),
+        unselectedItemColor: Color(0xFFBCA18A),
+        backgroundColor: Color(0xFFF8F3E3),
+      ),
+    );
+  }
+}
+
+class InsightPlaceholderScreen extends StatelessWidget {
+  const InsightPlaceholderScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Insight'),
+        backgroundColor: const Color(0xFF8B6F4E),
+      ),
+      body: const Center(
+        child: Text(
+          'Coming soon...',
+          style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+        ),
+      ),
     );
   }
 }
@@ -66,10 +129,10 @@ class DailyPromptScreen extends StatelessWidget {
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 IconButton(
-                  icon: Icon(
-                    Icons.emoji_emotions,
-                    color: Colors.yellow[700],
-                    size: 48,
+                  icon: SvgPicture.asset(
+                    'assets/angel.svg',
+                    width: 64,
+                    height: 64,
                   ),
                   onPressed: () {
                     Navigator.push(
@@ -83,7 +146,11 @@ class DailyPromptScreen extends StatelessWidget {
                 ),
                 const SizedBox(width: 48),
                 IconButton(
-                  icon: Icon(Icons.mood_bad, color: Colors.redAccent, size: 48),
+                  icon: SvgPicture.asset(
+                    'assets/devil.svg',
+                    width: 64,
+                    height: 64,
+                  ),
                   onPressed: () {
                     Navigator.push(
                       context,
@@ -153,12 +220,16 @@ class _DiaryEntryScreenState extends State<DiaryEntryScreen> {
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 widget.isAngel
-                    ? Icon(
-                        Icons.emoji_emotions,
-                        color: Colors.yellow[700],
-                        size: 48,
+                    ? SvgPicture.asset(
+                        'assets/angel.svg',
+                        width: 48,
+                        height: 48,
                       )
-                    : Icon(Icons.mood_bad, color: Colors.redAccent, size: 48),
+                    : SvgPicture.asset(
+                        'assets/devil.svg',
+                        width: 48,
+                        height: 48,
+                      ),
                 const SizedBox(width: 16),
                 Text(
                   widget.isAngel ? 'Angel Day' : 'Devil Day',
@@ -173,7 +244,7 @@ class _DiaryEntryScreenState extends State<DiaryEntryScreen> {
               maxLines: 4,
               decoration: const InputDecoration(
                 border: OutlineInputBorder(),
-                hintText: 'Write a few sentences... (optional)',
+                hintText: 'Write a few words/sentences... (optional)',
               ),
             ),
             const SizedBox(height: 24),
@@ -398,15 +469,15 @@ class _CalendarViewBodyState extends State<_CalendarViewBody> {
                             ),
                             if (entry != null && !isFuture)
                               entry.isAngel
-                                  ? Icon(
-                                      Icons.emoji_emotions,
-                                      color: Colors.yellow[700],
-                                      size: 24,
+                                  ? SvgPicture.asset(
+                                      'assets/angel.svg',
+                                      width: 40,
+                                      height: 40,
                                     )
-                                  : Icon(
-                                      Icons.mood_bad,
-                                      color: Colors.redAccent,
-                                      size: 24,
+                                  : SvgPicture.asset(
+                                      'assets/devil.svg',
+                                      width: 40,
+                                      height: 40,
                                     ),
                           ],
                         ),
@@ -459,6 +530,11 @@ class _DayDetailDialogState extends State<_DayDetailDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final today = DateTime.now();
+    final isToday =
+        widget.entry.date.year == today.year &&
+        widget.entry.date.month == today.month &&
+        widget.entry.date.day == today.day;
     return AlertDialog(
       title: Text(
         // Show full date instead of just day number
@@ -472,10 +548,10 @@ class _DayDetailDialogState extends State<_DayDetailDialog> {
           Row(
             children: [
               IconButton(
-                icon: Icon(
-                  Icons.emoji_emotions,
-                  color: Colors.yellow[700],
-                  size: 32,
+                icon: SvgPicture.asset(
+                  'assets/angel.svg',
+                  width: 32,
+                  height: 32,
                 ),
                 onPressed: () {
                   setState(() {
@@ -486,7 +562,11 @@ class _DayDetailDialogState extends State<_DayDetailDialog> {
                 color: _isAngel ? Colors.yellow[700] : Colors.grey,
               ),
               IconButton(
-                icon: Icon(Icons.mood_bad, color: Colors.redAccent, size: 32),
+                icon: SvgPicture.asset(
+                  'assets/devil.svg',
+                  width: 32,
+                  height: 32,
+                ),
                 onPressed: () {
                   setState(() {
                     _isAngel = false;
@@ -503,9 +583,11 @@ class _DayDetailDialogState extends State<_DayDetailDialog> {
           TextField(
             controller: _controller,
             maxLines: 4,
-            decoration: const InputDecoration(
-              border: OutlineInputBorder(),
-              hintText: 'Write a few sentences... (optional)',
+            decoration: InputDecoration(
+              border: const OutlineInputBorder(),
+              hintText: isToday
+                  ? 'What’s on your mind (optional)'
+                  : 'What was on your mind (optional)',
             ),
           ),
         ],
