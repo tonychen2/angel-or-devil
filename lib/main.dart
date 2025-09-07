@@ -173,58 +173,61 @@ class DailyPromptScreen extends StatelessWidget {
         backgroundColor: Colors.brown,
       ),
       body: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Text(
-              'Was your baby a little angel or a little devil today?',
-              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 32),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                IconButton(
-                  icon: SvgPicture.asset(
-                    'assets/angel.svg',
-                    width: 64,
-                    height: 64,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Text(
+                'Was your baby a little angel or a little devil today?',
+                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 32),
+              Wrap(
+                alignment: WrapAlignment.center,
+                spacing: 24,
+                children: [
+                  IconButton(
+                    icon: SvgPicture.asset(
+                      'assets/angel.svg',
+                      width: 64,
+                      height: 64,
+                    ),
+                    onPressed: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => DiaryEntryScreen(isAngel: true),
+                        ),
+                      ).then((_) {
+                        if (onComplete != null) onComplete!();
+                      });
+                    },
+                    tooltip: 'Angel',
                   ),
-                  onPressed: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => DiaryEntryScreen(isAngel: true),
-                      ),
-                    ).then((_) {
-                      if (onComplete != null) onComplete!();
-                    });
-                  },
-                  tooltip: 'Angel',
-                ),
-                const SizedBox(width: 48),
-                IconButton(
-                  icon: SvgPicture.asset(
-                    'assets/devil.svg',
-                    width: 64,
-                    height: 64,
+                  IconButton(
+                    icon: SvgPicture.asset(
+                      'assets/devil.svg',
+                      width: 64,
+                      height: 64,
+                    ),
+                    onPressed: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) =>
+                              DiaryEntryScreen(isAngel: false),
+                        ),
+                      ).then((_) {
+                        if (onComplete != null) onComplete!();
+                      });
+                    },
+                    tooltip: 'Devil',
                   ),
-                  onPressed: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => DiaryEntryScreen(isAngel: false),
-                      ),
-                    ).then((_) {
-                      if (onComplete != null) onComplete!();
-                    });
-                  },
-                  tooltip: 'Devil',
-                ),
-              ],
-            ),
-          ],
+                ],
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -258,116 +261,125 @@ class _DiaryEntryScreenState extends State<DiaryEntryScreen> {
         title: const Text('Diary Entry'),
         backgroundColor: Colors.brown,
       ),
-      body: Padding(
-        padding: const EdgeInsets.all(24.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                GestureDetector(
-                  onTap: () {
-                    setState(() {
-                      _isAngelSelected = true;
-                    });
-                  },
-                  child: Container(
-                    decoration: BoxDecoration(
-                      color: _isAngelSelected
-                          ? Colors.yellow[100]
-                          : Colors.transparent,
-                      border: Border.all(
-                        color: _isAngelSelected
-                            ? Colors.yellow[700]!
-                            : Colors.grey,
-                        width: 2,
+      body: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(16.0),
+          child: ConstrainedBox(
+            constraints: BoxConstraints(maxWidth: 400),
+            child: SingleChildScrollView(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Wrap(
+                    alignment: WrapAlignment.center,
+                    spacing: 12,
+                    runSpacing: 8,
+                    children: [
+                      GestureDetector(
+                        onTap: () {
+                          setState(() {
+                            _isAngelSelected = true;
+                          });
+                        },
+                        child: Container(
+                          decoration: BoxDecoration(
+                            color: _isAngelSelected
+                                ? Colors.yellow[100]
+                                : Colors.transparent,
+                            border: Border.all(
+                              color: _isAngelSelected
+                                  ? Colors.yellow[700]!
+                                  : Colors.grey,
+                              width: 2,
+                            ),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          padding: const EdgeInsets.all(4),
+                          child: SvgPicture.asset(
+                            'assets/angel.svg',
+                            width: 48,
+                            height: 48,
+                          ),
+                        ),
                       ),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    padding: const EdgeInsets.all(4),
-                    child: SvgPicture.asset(
-                      'assets/angel.svg',
-                      width: 48,
-                      height: 48,
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 16),
-                GestureDetector(
-                  onTap: () {
-                    setState(() {
-                      _isAngelSelected = false;
-                    });
-                  },
-                  child: Container(
-                    decoration: BoxDecoration(
-                      color: !_isAngelSelected
-                          ? Colors.red[100]
-                          : Colors.transparent,
-                      border: Border.all(
-                        color: !_isAngelSelected
-                            ? Colors.redAccent
-                            : Colors.grey,
-                        width: 2,
+                      GestureDetector(
+                        onTap: () {
+                          setState(() {
+                            _isAngelSelected = false;
+                          });
+                        },
+                        child: Container(
+                          decoration: BoxDecoration(
+                            color: !_isAngelSelected
+                                ? Colors.red[100]
+                                : Colors.transparent,
+                            border: Border.all(
+                              color: !_isAngelSelected
+                                  ? Colors.redAccent
+                                  : Colors.grey,
+                              width: 2,
+                            ),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          padding: const EdgeInsets.all(4),
+                          child: SvgPicture.asset(
+                            'assets/devil.svg',
+                            width: 48,
+                            height: 48,
+                          ),
+                        ),
                       ),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    padding: const EdgeInsets.all(4),
-                    child: SvgPicture.asset(
-                      'assets/devil.svg',
-                      width: 48,
-                      height: 48,
+                      SizedBox(
+                        width: 180,
+                        child: Text(
+                          getAngelDevilText(_isAngelSelected, true),
+                          style: const TextStyle(fontSize: 18),
+                          softWrap: true,
+                          overflow: TextOverflow.visible,
+                          textAlign: TextAlign.center,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 24),
+                  const Text('What’s on your mind?'),
+                  TextField(
+                    controller: _controller,
+                    maxLines: 4,
+                    decoration: const InputDecoration(
+                      border: OutlineInputBorder(),
+                      hintText: 'Write a few words/sentences... (optional)',
                     ),
                   ),
-                ),
-                const SizedBox(width: 16),
-                Flexible(
-                  child: Text(
-                    getAngelDevilText(_isAngelSelected, true),
-                    style: const TextStyle(fontSize: 18),
-                    softWrap: true,
-                    overflow: TextOverflow.visible,
+                  const SizedBox(height: 24),
+                  ElevatedButton(
+                    onPressed: () async {
+                      // Use _isAngelSelected for saving
+                      final box = Hive.box<DiaryEntry>('entries');
+                      final today = DateTime.now();
+                      final entry = DiaryEntry(
+                        date: DateTime(today.year, today.month, today.day),
+                        isAngel: _isAngelSelected,
+                        note: _controller.text.trim(),
+                      );
+                      await box.put(entry.date.toIso8601String(), entry);
+                      logger.i('Entry saved successfully');
+                      logger.i('Attempting navigation to CalendarViewScreen');
+                      if (mounted) {
+                        Navigator.pushReplacement(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => const CalendarViewScreen(),
+                          ),
+                        );
+                      }
+                    },
+                    child: const Text('Save'),
                   ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 24),
-            const Text('What’s on your mind?'),
-            TextField(
-              controller: _controller,
-              maxLines: 4,
-              decoration: const InputDecoration(
-                border: OutlineInputBorder(),
-                hintText: 'Write a few words/sentences... (optional)',
+                ],
               ),
             ),
-            const SizedBox(height: 24),
-            ElevatedButton(
-              onPressed: () async {
-                // Use _isAngelSelected for saving
-                final box = Hive.box<DiaryEntry>('entries');
-                final today = DateTime.now();
-                final entry = DiaryEntry(
-                  date: DateTime(today.year, today.month, today.day),
-                  isAngel: _isAngelSelected,
-                  note: _controller.text.trim(),
-                );
-                await box.put(entry.date.toIso8601String(), entry);
-                logger.i('Entry saved successfully');
-                logger.i('Attempting navigation to CalendarViewScreen');
-                if (mounted) {
-                  Navigator.pushReplacement(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => const CalendarViewScreen(),
-                    ),
-                  );
-                }
-              },
-              child: const Text('Save'),
-            ),
-          ],
+          ),
         ),
       ),
     );
@@ -532,54 +544,65 @@ class _CalendarViewBodyState extends State<_CalendarViewBody> {
                               ),
                             );
                           },
-                    child: Container(
-                      decoration: BoxDecoration(
-                        color: isFuture || !isCurrentMonth
-                            ? const Color(0xFFF3E9D7)
-                            : isToday
-                            ? const Color(0xFFEAD7B7)
-                            : (entry != null
-                                  ? const Color(0xFFF8F3E3)
-                                  : const Color(0xFFF8F3E3)),
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(
-                          color: isFuture || !isCurrentMonth
-                              ? const Color(0xFFBCA18A)
-                              : const Color(0xFF8B6F4E),
-                          width: 2,
-                        ),
-                      ),
-                      child: Opacity(
-                        opacity: isFuture ? 0.5 : 1.0,
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Text(
-                              '$day',
-                              style: TextStyle(
-                                fontWeight: FontWeight.bold,
-                                color: isToday
-                                    ? const Color(0xFF6E2C00)
-                                    : isFuture || !isCurrentMonth
-                                    ? const Color(0xFFBCA18A)
-                                    : null,
-                              ),
+                    child: LayoutBuilder(
+                      builder: (context, constraints) {
+                        double iconSize = 32;
+                        double gap = 2;
+                        return Container(
+                          decoration: BoxDecoration(
+                            color: isFuture || !isCurrentMonth
+                                ? const Color(0xFFF3E9D7)
+                                : isToday
+                                ? const Color(0xFFEAD7B7)
+                                : (entry != null
+                                      ? const Color(0xFFF8F3E3)
+                                      : const Color(0xFFF8F3E3)),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(
+                              color: isFuture || !isCurrentMonth
+                                  ? const Color(0xFFBCA18A)
+                                  : const Color(0xFF8B6F4E),
+                              width: 2,
                             ),
-                            if (entry != null && !isFuture)
-                              entry.isAngel
-                                  ? SvgPicture.asset(
-                                      'assets/angel.svg',
-                                      width: 40,
-                                      height: 40,
-                                    )
-                                  : SvgPicture.asset(
-                                      'assets/devil.svg',
-                                      width: 40,
-                                      height: 40,
-                                    ),
-                          ],
-                        ),
-                      ),
+                          ),
+                          child: Opacity(
+                            opacity: isFuture ? 0.5 : 1.0,
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Text(
+                                  '$day',
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    color: isToday
+                                        ? const Color(0xFF6E2C00)
+                                        : isFuture || !isCurrentMonth
+                                        ? const Color(0xFFBCA18A)
+                                        : null,
+                                  ),
+                                  textAlign: TextAlign.center,
+                                ),
+                                if (entry != null && !isFuture)
+                                  Padding(
+                                    padding: EdgeInsets.only(top: gap),
+                                    child: entry.isAngel
+                                        ? SvgPicture.asset(
+                                            'assets/angel.svg',
+                                            width: iconSize,
+                                            height: iconSize,
+                                          )
+                                        : SvgPicture.asset(
+                                            'assets/devil.svg',
+                                            width: iconSize,
+                                            height: iconSize,
+                                          ),
+                                  ),
+                              ],
+                            ),
+                          ),
+                        );
+                      },
                     ),
                   );
                 },
@@ -639,83 +662,93 @@ class _DayDetailDialogState extends State<_DayDetailDialog> {
         '${widget.entry.date.month.toString().padLeft(2, '0')}/${widget.entry.date.day.toString().padLeft(2, '0')}/${widget.entry.date.year}',
         style: const TextStyle(fontWeight: FontWeight.bold),
       ),
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
+      content: SingleChildScrollView(
+        child: ConstrainedBox(
+          constraints: BoxConstraints(maxWidth: 350),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              GestureDetector(
-                onTap: () {
-                  setState(() {
-                    _isAngel = true;
-                    _edited = true;
-                  });
-                },
-                child: Container(
-                  decoration: BoxDecoration(
-                    color: _isAngel ? Colors.yellow[100] : Colors.transparent,
-                    border: Border.all(
-                      color: _isAngel ? Colors.yellow[700]! : Colors.grey,
-                      width: 2,
+              Wrap(
+                alignment: WrapAlignment.center,
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  GestureDetector(
+                    onTap: () {
+                      setState(() {
+                        _isAngel = true;
+                        _edited = true;
+                      });
+                    },
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: _isAngel
+                            ? Colors.yellow[100]
+                            : Colors.transparent,
+                        border: Border.all(
+                          color: _isAngel ? Colors.yellow[700]! : Colors.grey,
+                          width: 2,
+                        ),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      padding: const EdgeInsets.all(4),
+                      child: SvgPicture.asset(
+                        'assets/angel.svg',
+                        width: 32,
+                        height: 32,
+                      ),
                     ),
-                    borderRadius: BorderRadius.circular(12),
                   ),
-                  padding: const EdgeInsets.all(4),
-                  child: SvgPicture.asset(
-                    'assets/angel.svg',
-                    width: 32,
-                    height: 32,
-                  ),
-                ),
-              ),
-              const SizedBox(width: 8),
-              GestureDetector(
-                onTap: () {
-                  setState(() {
-                    _isAngel = false;
-                    _edited = true;
-                  });
-                },
-                child: Container(
-                  decoration: BoxDecoration(
-                    color: !_isAngel ? Colors.red[100] : Colors.transparent,
-                    border: Border.all(
-                      color: !_isAngel ? Colors.redAccent : Colors.grey,
-                      width: 2,
+                  GestureDetector(
+                    onTap: () {
+                      setState(() {
+                        _isAngel = false;
+                        _edited = true;
+                      });
+                    },
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: !_isAngel ? Colors.red[100] : Colors.transparent,
+                        border: Border.all(
+                          color: !_isAngel ? Colors.redAccent : Colors.grey,
+                          width: 2,
+                        ),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      padding: const EdgeInsets.all(4),
+                      child: SvgPicture.asset(
+                        'assets/devil.svg',
+                        width: 32,
+                        height: 32,
+                      ),
                     ),
-                    borderRadius: BorderRadius.circular(12),
                   ),
-                  padding: const EdgeInsets.all(4),
-                  child: SvgPicture.asset(
-                    'assets/devil.svg',
-                    width: 32,
-                    height: 32,
+                  SizedBox(
+                    width: 140,
+                    child: Text(
+                      getAngelDevilText(_isAngel, isToday),
+                      softWrap: true,
+                      overflow: TextOverflow.visible,
+                      textAlign: TextAlign.center,
+                    ),
                   ),
-                ),
+                ],
               ),
-              const SizedBox(width: 8),
-              Flexible(
-                child: Text(
-                  getAngelDevilText(_isAngel, isToday),
-                  softWrap: true,
-                  overflow: TextOverflow.visible,
+              const SizedBox(height: 8),
+              TextField(
+                controller: _controller,
+                maxLines: 4,
+                decoration: InputDecoration(
+                  border: const OutlineInputBorder(),
+                  hintText: isToday
+                      ? 'What’s on your mind (optional)'
+                      : 'What was on your mind (optional)',
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 8),
-          TextField(
-            controller: _controller,
-            maxLines: 4,
-            decoration: InputDecoration(
-              border: const OutlineInputBorder(),
-              hintText: isToday
-                  ? 'What’s on your mind (optional)'
-                  : 'What was on your mind (optional)',
-            ),
-          ),
-        ],
+        ),
       ),
       actions: [
         TextButton(
