@@ -5,6 +5,24 @@ import 'package:hive_flutter/hive_flutter.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:flutter/material.dart';
+import 'package:flutter_svg/flutter_svg.dart';
+import 'models/entry.dart';
+import 'package:hive_flutter/hive_flutter.dart';
+import 'package:google_fonts/google_fonts.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
+// Shared helper for angel/devil text
+String getAngelDevilText(bool isAngel, bool isToday) {
+  return isToday
+      ? isAngel
+        ? 'Yay! What an angel baby'
+        : 'Ah little devil! Parenting is hard for everyone so you are not alone. Let’s hope tomorrow is a better day?'
+        : isAngel
+          ? 'Angel Day'
+          : 'Devil Day';
+}
+
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Hive.initFlutter();
@@ -251,6 +269,14 @@ class _DiaryEntryScreenState extends State<DiaryEntryScreen> {
     }
   }
 
+  bool _isAngelSelected = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _isAngelSelected = widget.isAngel;
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -266,21 +292,69 @@ class _DiaryEntryScreenState extends State<DiaryEntryScreen> {
             Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                widget.isAngel
-                    ? SvgPicture.asset(
-                        'assets/angel.svg',
-                        width: 48,
-                        height: 48,
-                      )
-                    : SvgPicture.asset(
-                        'assets/devil.svg',
-                        width: 48,
-                        height: 48,
+                GestureDetector(
+                  onTap: () {
+                    setState(() {
+                      _isAngelSelected = true;
+                    });
+                  },
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: _isAngelSelected
+                          ? Colors.yellow[100]
+                          : Colors.transparent,
+                      border: Border.all(
+                        color: _isAngelSelected
+                            ? Colors.yellow[700]!
+                            : Colors.grey,
+                        width: 2,
                       ),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    padding: const EdgeInsets.all(4),
+                    child: SvgPicture.asset(
+                      'assets/angel.svg',
+                      width: 48,
+                      height: 48,
+                    ),
+                  ),
+                ),
                 const SizedBox(width: 16),
-                Text(
-                  widget.isAngel ? 'Angel Day' : 'Devil Day',
-                  style: const TextStyle(fontSize: 18),
+                GestureDetector(
+                  onTap: () {
+                    setState(() {
+                      _isAngelSelected = false;
+                    });
+                  },
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: !_isAngelSelected
+                          ? Colors.red[100]
+                          : Colors.transparent,
+                      border: Border.all(
+                        color: !_isAngelSelected
+                            ? Colors.redAccent
+                            : Colors.grey,
+                        width: 2,
+                      ),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    padding: const EdgeInsets.all(4),
+                    child: SvgPicture.asset(
+                      'assets/devil.svg',
+                      width: 48,
+                      height: 48,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 16),
+                Flexible(
+                  child: Text(
+                    getAngelDevilText(_isAngelSelected, true),
+                    style: const TextStyle(fontSize: 18),
+                    softWrap: true,
+                    overflow: TextOverflow.visible,
+                  ),
                 ),
               ],
             ),
@@ -297,7 +371,16 @@ class _DiaryEntryScreenState extends State<DiaryEntryScreen> {
             const SizedBox(height: 24),
             ElevatedButton(
               onPressed: () async {
-                await _saveEntry();
+                // Use _isAngelSelected for saving
+                final box = Hive.box<DiaryEntry>('entries');
+                final today = DateTime.now();
+                final entry = DiaryEntry(
+                  date: DateTime(today.year, today.month, today.day),
+                  isAngel: _isAngelSelected,
+                  note: _controller.text.trim(),
+                );
+                await box.put(entry.date.toIso8601String(), entry);
+                print('Entry saved successfully');
                 print('Attempting navigation to CalendarViewScreen');
                 if (mounted) {
                   Navigator.pushReplacement(
@@ -624,7 +707,13 @@ class _DayDetailDialogState extends State<_DayDetailDialog> {
                 color: !_isAngel ? Colors.redAccent : Colors.grey,
               ),
               const SizedBox(width: 8),
-              Text(_isAngel ? 'Angel Day' : 'Devil Day'),
+              Flexible(
+                child: Text(
+                  getAngelDevilText(_isAngel, isToday),
+                  softWrap: true,
+                  overflow: TextOverflow.visible,
+                ),
+              ),
             ],
           ),
           const SizedBox(height: 8),
