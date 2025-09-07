@@ -12,8 +12,8 @@ final logger = Logger();
 String getAngelDevilText(bool isAngel, bool isToday) {
   return isToday
       ? isAngel
-            ? 'Yay! What an angel baby'
-            : 'Ah little devil! Parenting is hard for everyone so you are not alone. Let’s hope tomorrow is a better day?'
+            ? 'Hoo-ray! What an angel baby you have'
+            : 'Ah little devil! Parenting is hard for everyone so don’t be too harsh on yourself. Perhaps tomorrow will be a better day?'
       : isAngel
       ? 'Angel Day'
       : 'Devil Day';
@@ -645,33 +645,54 @@ class _DayDetailDialogState extends State<_DayDetailDialog> {
         children: [
           Row(
             children: [
-              IconButton(
-                icon: SvgPicture.asset(
-                  'assets/angel.svg',
-                  width: 32,
-                  height: 32,
-                ),
-                onPressed: () {
+              GestureDetector(
+                onTap: () {
                   setState(() {
                     _isAngel = true;
                     _edited = true;
                   });
                 },
-                color: _isAngel ? Colors.yellow[700] : Colors.grey,
-              ),
-              IconButton(
-                icon: SvgPicture.asset(
-                  'assets/devil.svg',
-                  width: 32,
-                  height: 32,
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: _isAngel ? Colors.yellow[100] : Colors.transparent,
+                    border: Border.all(
+                      color: _isAngel ? Colors.yellow[700]! : Colors.grey,
+                      width: 2,
+                    ),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  padding: const EdgeInsets.all(4),
+                  child: SvgPicture.asset(
+                    'assets/angel.svg',
+                    width: 32,
+                    height: 32,
+                  ),
                 ),
-                onPressed: () {
+              ),
+              const SizedBox(width: 8),
+              GestureDetector(
+                onTap: () {
                   setState(() {
                     _isAngel = false;
                     _edited = true;
                   });
                 },
-                color: !_isAngel ? Colors.redAccent : Colors.grey,
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: !_isAngel ? Colors.red[100] : Colors.transparent,
+                    border: Border.all(
+                      color: !_isAngel ? Colors.redAccent : Colors.grey,
+                      width: 2,
+                    ),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  padding: const EdgeInsets.all(4),
+                  child: SvgPicture.asset(
+                    'assets/devil.svg',
+                    width: 32,
+                    height: 32,
+                  ),
+                ),
               ),
               const SizedBox(width: 8),
               Flexible(
