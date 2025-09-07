@@ -3,6 +3,7 @@ import 'package:flutter_svg/flutter_svg.dart';
 import 'models/entry.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -34,8 +35,52 @@ class AngelDevilApp extends StatelessWidget {
           secondary: const Color(0xFF8B6F4E),
         ),
       ),
-      home: const MainTabView(),
+      home: const LaunchDecider(),
     );
+  }
+}
+
+class LaunchDecider extends StatefulWidget {
+  const LaunchDecider({super.key});
+
+  @override
+  State<LaunchDecider> createState() => _LaunchDeciderState();
+}
+
+class _LaunchDeciderState extends State<LaunchDecider> {
+  bool? _firstLaunch;
+
+  @override
+  void initState() {
+    super.initState();
+    _checkFirstLaunch();
+  }
+
+  Future<void> _checkFirstLaunch() async {
+    final prefs = await SharedPreferences.getInstance();
+    final seenPrompt = prefs.getBool('seenPrompt') ?? false;
+    setState(() {
+      _firstLaunch = !seenPrompt;
+    });
+    if (!seenPrompt) {
+      await prefs.setBool('seenPrompt', true);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_firstLaunch == null) {
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    }
+    return _firstLaunch!
+        ? DailyPromptScreen(
+            onComplete: () {
+              setState(() {
+                _firstLaunch = false;
+              });
+            },
+          )
+        : const MainTabView();
   }
 }
 
@@ -54,10 +99,7 @@ class _MainTabViewState extends State<MainTabView> {
     return Scaffold(
       body: IndexedStack(
         index: _selectedIndex,
-        children: const [
-          CalendarViewScreen(),
-          InsightPlaceholderScreen(),
-        ],
+        children: const [CalendarViewScreen(), InsightPlaceholderScreen()],
       ),
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _selectedIndex,
@@ -106,7 +148,8 @@ class InsightPlaceholderScreen extends StatelessWidget {
 
 // MVP Screen 1: Daily Prompt
 class DailyPromptScreen extends StatelessWidget {
-  const DailyPromptScreen({super.key});
+  final VoidCallback? onComplete;
+  const DailyPromptScreen({super.key, this.onComplete});
 
   @override
   Widget build(BuildContext context) {
@@ -140,7 +183,9 @@ class DailyPromptScreen extends StatelessWidget {
                       MaterialPageRoute(
                         builder: (context) => DiaryEntryScreen(isAngel: true),
                       ),
-                    );
+                    ).then((_) {
+                      if (onComplete != null) onComplete!();
+                    });
                   },
                   tooltip: 'Angel',
                 ),
@@ -157,7 +202,9 @@ class DailyPromptScreen extends StatelessWidget {
                       MaterialPageRoute(
                         builder: (context) => DiaryEntryScreen(isAngel: false),
                       ),
-                    );
+                    ).then((_) {
+                      if (onComplete != null) onComplete!();
+                    });
                   },
                   tooltip: 'Devil',
                 ),
@@ -344,6 +391,7 @@ class _CalendarViewBodyState extends State<_CalendarViewBody> {
       appBar: AppBar(
         title: const Text('Monthly Calendar'),
         backgroundColor: const Color(0xFF8B6F4E),
+        automaticallyImplyLeading: false,
       ),
       body: Padding(
         padding: const EdgeInsets.all(16.0),
