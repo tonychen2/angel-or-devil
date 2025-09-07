@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'models/entry.dart';
-import 'package:hive/hive.dart';
 import 'package:hive_flutter/hive_flutter.dart';
+import 'package:google_fonts/google_fonts.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -17,13 +17,26 @@ class AngelDevilApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Angel Baby',
+      title: 'Angel or Devil',
       theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.pinkAccent),
-        useMaterial3: true,
-        fontFamily: 'Nunito',
+        scaffoldBackgroundColor: const Color(
+          0xFFF8F3E3,
+        ), // Papyrus-like background
+        primaryColor: const Color(0xFF8B6F4E), // Brown
+        appBarTheme: const AppBarTheme(
+          backgroundColor: Color(0xFF8B6F4E),
+          foregroundColor: Color(0xFFF8F3E3),
+          elevation: 0,
+        ),
+        textTheme:
+            GoogleFonts.patrickHandTextTheme(), // Handwritten casual font
+        fontFamily: GoogleFonts.patrickHand().fontFamily,
+        colorScheme: ColorScheme.fromSwatch().copyWith(
+          primary: const Color(0xFF8B6F4E),
+          secondary: const Color(0xFF8B6F4E),
+        ),
       ),
-      home: const DailyPromptScreen(),
+      home: const CalendarViewScreen(),
     );
   }
 }
@@ -37,7 +50,7 @@ class DailyPromptScreen extends StatelessWidget {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Angel Baby'),
-        backgroundColor: Colors.pinkAccent,
+        backgroundColor: Colors.brown,
       ),
       body: Center(
         child: Column(
@@ -129,7 +142,7 @@ class _DiaryEntryScreenState extends State<DiaryEntryScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Diary Entry'),
-        backgroundColor: Colors.pinkAccent,
+        backgroundColor: Colors.brown,
       ),
       body: Padding(
         padding: const EdgeInsets.all(24.0),
@@ -242,14 +255,24 @@ class _CalendarViewBodyState extends State<_CalendarViewBody> {
               entry.date.month == _displayMonth.month,
         )
         .toList();
-    Map<int, DiaryEntry> dayToEntry = {
-      for (var entry in entries) entry.date.day: entry,
-    };
+
+    // Calculate calendar grid range for full weeks
+    final firstWeekday = firstDayOfMonth.weekday % 7; // Sunday=0
+    final lastDayOfMonth = DateTime(
+      _displayMonth.year,
+      _displayMonth.month,
+      daysInMonth,
+    );
+    final lastWeekday = lastDayOfMonth.weekday % 7;
+    final gridStart = firstDayOfMonth.subtract(Duration(days: firstWeekday));
+    final gridEnd = lastDayOfMonth.add(Duration(days: 6 - lastWeekday));
+    final totalDays = gridEnd.difference(gridStart).inDays + 1;
+    final weekDays = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
 
     return Scaffold(
       appBar: AppBar(
         title: const Text('Monthly Calendar'),
-        backgroundColor: Colors.pinkAccent,
+        backgroundColor: const Color(0xFF8B6F4E),
       ),
       body: Padding(
         padding: const EdgeInsets.all(16.0),
@@ -276,6 +299,26 @@ class _CalendarViewBodyState extends State<_CalendarViewBody> {
               ],
             ),
             const SizedBox(height: 16),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: weekDays
+                  .map(
+                    (d) => Expanded(
+                      child: Center(
+                        child: Text(
+                          d,
+                          style: const TextStyle(
+                            fontWeight: FontWeight.bold,
+                            color: Color(0xFF8B6F4E),
+                            fontSize: 16,
+                          ),
+                        ),
+                      ),
+                    ),
+                  )
+                  .toList(),
+            ),
+            const SizedBox(height: 8),
             Expanded(
               child: GridView.builder(
                 gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
@@ -284,22 +327,17 @@ class _CalendarViewBodyState extends State<_CalendarViewBody> {
                   crossAxisSpacing: 4,
                   mainAxisSpacing: 4,
                 ),
-                itemCount: daysInMonth + firstDayOfMonth.weekday - 1,
+                itemCount: totalDays,
                 itemBuilder: (context, index) {
-                  if (index < firstDayOfMonth.weekday - 1) {
-                    return const SizedBox();
-                  }
-                  final day = index - (firstDayOfMonth.weekday - 2);
-                  final date = DateTime(
-                    _displayMonth.year,
-                    _displayMonth.month,
-                    day,
-                  );
-                  final entry = dayToEntry[day];
+                  final date = gridStart.add(Duration(days: index));
+                  final isCurrentMonth = date.month == _displayMonth.month;
+                  final day = date.day;
+                  // Get entry for any date, not just current month
+                  final entry = box.get(date.toIso8601String());
                   final isToday = date == today;
                   final isFuture = date.isAfter(today);
                   return GestureDetector(
-                    onTap: isFuture
+                    onTap: isFuture || !isCurrentMonth
                         ? null
                         : () {
                             showDialog(
@@ -320,46 +358,58 @@ class _CalendarViewBodyState extends State<_CalendarViewBody> {
                                     updatedEntry,
                                   );
                                   Navigator.pop(context);
-                                  setState(() {}); // Refresh calendar
+                                  setState(() {});
                                 },
                               ),
                             );
                           },
                     child: Container(
                       decoration: BoxDecoration(
-                        color: isToday
-                            ? Colors.blue[100]
-                            : entry != null
-                            ? Colors.pink[50]
-                            : Colors.grey[200],
+                        color: isFuture || !isCurrentMonth
+                            ? const Color(0xFFF3E9D7)
+                            : isToday
+                            ? const Color(0xFFEAD7B7)
+                            : (entry != null
+                                  ? const Color(0xFFF8F3E3)
+                                  : const Color(0xFFF8F3E3)),
                         borderRadius: BorderRadius.circular(8),
                         border: Border.all(
-                          color: Colors.pinkAccent.withOpacity(0.3),
+                          color: isFuture || !isCurrentMonth
+                              ? const Color(0xFFBCA18A)
+                              : const Color(0xFF8B6F4E),
+                          width: 2,
                         ),
                       ),
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Text(
-                            '$day',
-                            style: TextStyle(
-                              fontWeight: FontWeight.bold,
-                              color: isToday ? Colors.blue : null,
+                      child: Opacity(
+                        opacity: isFuture ? 0.5 : 1.0,
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Text(
+                              '$day',
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                color: isToday
+                                    ? const Color(0xFF6E2C00)
+                                    : isFuture || !isCurrentMonth
+                                    ? const Color(0xFFBCA18A)
+                                    : null,
+                              ),
                             ),
-                          ),
-                          if (entry != null)
-                            entry.isAngel
-                                ? Icon(
-                                    Icons.emoji_emotions,
-                                    color: Colors.yellow[700],
-                                    size: 24,
-                                  )
-                                : Icon(
-                                    Icons.mood_bad,
-                                    color: Colors.redAccent,
-                                    size: 24,
-                                  ),
-                        ],
+                            if (entry != null && !isFuture)
+                              entry.isAngel
+                                  ? Icon(
+                                      Icons.emoji_emotions,
+                                      color: Colors.yellow[700],
+                                      size: 24,
+                                    )
+                                  : Icon(
+                                      Icons.mood_bad,
+                                      color: Colors.redAccent,
+                                      size: 24,
+                                    ),
+                          ],
+                        ),
                       ),
                     ),
                   );
@@ -410,7 +460,11 @@ class _DayDetailDialogState extends State<_DayDetailDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: Text('Day ${widget.day}'),
+      title: Text(
+        // Show full date instead of just day number
+        '${widget.entry.date.month.toString().padLeft(2, '0')}/${widget.entry.date.day.toString().padLeft(2, '0')}/${widget.entry.date.year}',
+        style: const TextStyle(fontWeight: FontWeight.bold),
+      ),
       content: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,

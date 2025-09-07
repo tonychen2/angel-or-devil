@@ -1,0 +1,23 @@
+<svg width="64" height="64" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg">
+  <ellipse cx="32" cy="54" rx="16" ry="6" fill="#EAD7B7"/>
+  <circle cx="32" cy="32" r="14" fill="#FFE5E5" stroke="#8B6F4E" stroke-width="2"/>
+  <polygon points="24,18 28,10 32,18" fill="#D32F2F"/>
+  <polygon points="40,18 36,10 32,18" fill="#D32F2F"/>
+  <!-- No wings -->
+  <!-- Red fork farther from body, held in hand -->
+  <!-- One red fork farther from body, held in hand -->
+  <rect x="50" y="38" width="2" height="14" fill="#D32F2F"/>
+  <!-- Devil fork -->
+  <rect x="44" y="38" width="2" height="12" fill="#8B6F4E"/>
+  <line x1="45" y1="38" x2="42" y2="34" stroke="#8B6F4E" stroke-width="2"/>
+  <line x1="45" y1="38" x2="48" y2="34" stroke="#8B6F4E" stroke-width="2"/>
+  <line x1="42" y1="34" x2="42" y2="32" stroke="#8B6F4E" stroke-width="2"/>
+  <line x1="45" y1="34" x2="45" y2="32" stroke="#8B6F4E" stroke-width="2"/>
+  <line x1="48" y1="34" x2="48" y2="32" stroke="#8B6F4E" stroke-width="2"/>
+    <line x1="51" y1="38" x2="54" y2="34" stroke="#D32F2F" stroke-width="2"/>
+    <line x1="51" y1="38" x2="48" y2="34" stroke="#D32F2F" stroke-width="2"/>
+  <circle cx="28" cy="28" r="2" fill="#8B6F4E"/>
+  <circle cx="36" cy="28" r="2" fill="#8B6F4E"/>
+  <path d="M28 36 Q32 32 36 36" stroke="#8B6F4E" stroke-width="2" fill="none"/>
+  <path d="M32 46 Q34 48 36 46" stroke="#D32F2F" stroke-width="2" fill="none"/>
+</svg>

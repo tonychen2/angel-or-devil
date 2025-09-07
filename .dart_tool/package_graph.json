@@ -10,6 +10,7 @@
         "cupertino_icons",
         "flutter",
         "flutter_lints",
+        "google_fonts",
         "hive",
         "hive_flutter"
       ],
@@ -99,6 +100,16 @@
       "name": "cupertino_icons",
       "version": "1.0.8",
       "dependencies": []
+    },
+    {
+      "name": "google_fonts",
+      "version": "6.3.1",
+      "dependencies": [
+        "crypto",
+        "flutter",
+        "http",
+        "path_provider"
+      ]
     },
     {
       "name": "hive_flutter",
@@ -552,6 +563,16 @@
         "path_provider_linux",
         "path_provider_platform_interface",
         "path_provider_windows"
+      ]
+    },
+    {
+      "name": "http",
+      "version": "1.5.0",
+      "dependencies": [
+        "async",
+        "http_parser",
+        "meta",
+        "web"
       ]
     },
     {

@@ -1,0 +1,16 @@
+<svg width="64" height="64" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg">
+  <ellipse cx="32" cy="54" rx="16" ry="6" fill="#EAD7B7"/>
+  <circle cx="32" cy="32" r="14" fill="#FFF8E1" stroke="#8B6F4E" stroke-width="2"/>
+  <ellipse cx="32" cy="20" rx="10" ry="4" fill="#FFD700" opacity="0.7"/>
+  <!-- Wings, placed beside the body, not overlapping -->
+  <!-- Wings: connected to body, angled away from head -->
+  <!-- Wings: lower parts near body center, upper parts wide open -->
+  <!-- Smaller oval wings, angled away from head, connected to body -->
+  <!-- Wings: angled away from the body, connected at lower sides -->
+  <!-- Wings: mirrored horizontally, angled away from body -->
+  <ellipse cx="18" cy="44" rx="7" ry="4" fill="#B3E5FC" opacity="0.7" transform="rotate(35 18 44)"/>
+  <ellipse cx="46" cy="44" rx="7" ry="4" fill="#B3E5FC" opacity="0.7" transform="rotate(-35 46 44)"/>
+  <circle cx="32" cy="28" r="2" fill="#8B6F4E"/>
+  <circle cx="38" cy="28" r="2" fill="#8B6F4E"/>
+  <path d="M28 36 Q32 40 36 36" stroke="#8B6F4E" stroke-width="2" fill="none"/>
+</svg>
