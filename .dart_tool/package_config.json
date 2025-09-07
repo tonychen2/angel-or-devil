@@ -315,9 +315,9 @@
     },
     {
       "name": "meta",
-      "rootUri": "file:///home/vscode/.pub-cache/hosted/pub.dev/meta-1.17.0",
+      "rootUri": "file:///home/vscode/.pub-cache/hosted/pub.dev/meta-1.16.0",
       "packageUri": "lib/",
-      "languageVersion": "3.5"
+      "languageVersion": "2.12"
     },
     {
       "name": "mime",
@@ -525,7 +525,7 @@
     },
     {
       "name": "test_api",
-      "rootUri": "file:///home/vscode/.pub-cache/hosted/pub.dev/test_api-0.7.7",
+      "rootUri": "file:///home/vscode/.pub-cache/hosted/pub.dev/test_api-0.7.6",
       "packageUri": "lib/",
       "languageVersion": "3.5"
     },
@@ -617,12 +617,12 @@
       "name": "angel_or_devil",
       "rootUri": "../",
       "packageUri": "lib/",
-      "languageVersion": "3.10"
+      "languageVersion": "3.9"
     }
   ],
   "generator": "pub",
-  "generatorVersion": "3.10.0-158.0.dev",
+  "generatorVersion": "3.9.2",
   "flutterRoot": "file:///home/vscode/flutter",
-  "flutterVersion": "3.36.0-1.0.pre-364",
+  "flutterVersion": "3.35.3",
   "pubCache": "file:///home/vscode/.pub-cache"
 }
