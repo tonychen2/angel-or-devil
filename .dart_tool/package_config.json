@@ -75,7 +75,7 @@
     },
     {
       "name": "built_value",
-      "rootUri": "file:///home/vscode/.pub-cache/hosted/pub.dev/built_value-8.11.1",
+      "rootUri": "file:///home/vscode/.pub-cache/hosted/pub.dev/built_value-8.12.0",
       "packageUri": "lib/",
       "languageVersion": "3.0"
     },
@@ -288,6 +288,12 @@
       "rootUri": "file:///home/vscode/.pub-cache/hosted/pub.dev/lints-6.0.0",
       "packageUri": "lib/",
       "languageVersion": "3.8"
+    },
+    {
+      "name": "logger",
+      "rootUri": "file:///home/vscode/.pub-cache/hosted/pub.dev/logger-2.6.1",
+      "packageUri": "lib/",
+      "languageVersion": "2.17"
     },
     {
       "name": "logging",

@@ -4,23 +4,19 @@ import 'models/entry.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:logger/logger.dart';
 
-import 'package:flutter/material.dart';
-import 'package:flutter_svg/flutter_svg.dart';
-import 'models/entry.dart';
-import 'package:hive_flutter/hive_flutter.dart';
-import 'package:google_fonts/google_fonts.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+final logger = Logger();
 
 // Shared helper for angel/devil text
 String getAngelDevilText(bool isAngel, bool isToday) {
   return isToday
       ? isAngel
-        ? 'Yay! What an angel baby'
-        : 'Ah little devil! Parenting is hard for everyone so you are not alone. Let’s hope tomorrow is a better day?'
-        : isAngel
-          ? 'Angel Day'
-          : 'Devil Day';
+            ? 'Yay! What an angel baby'
+            : 'Ah little devil! Parenting is hard for everyone so you are not alone. Let’s hope tomorrow is a better day?'
+      : isAngel
+      ? 'Angel Day'
+      : 'Devil Day';
 }
 
 Future<void> main() async {
@@ -247,28 +243,6 @@ class DiaryEntryScreen extends StatefulWidget {
 class _DiaryEntryScreenState extends State<DiaryEntryScreen> {
   final TextEditingController _controller = TextEditingController();
 
-  Future<void> _saveEntry() async {
-    print('Save button pressed');
-    try {
-      final box = Hive.box<DiaryEntry>('entries');
-      final today = DateTime.now();
-      final entry = DiaryEntry(
-        date: DateTime(today.year, today.month, today.day),
-        isAngel: widget.isAngel,
-        note: _controller.text.trim(),
-      );
-      await box.put(entry.date.toIso8601String(), entry);
-      print('Entry saved successfully');
-    } catch (e) {
-      print('Error saving entry: $e');
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Error saving entry: $e')));
-      }
-    }
-  }
-
   bool _isAngelSelected = true;
 
   @override
@@ -380,8 +354,8 @@ class _DiaryEntryScreenState extends State<DiaryEntryScreen> {
                   note: _controller.text.trim(),
                 );
                 await box.put(entry.date.toIso8601String(), entry);
-                print('Entry saved successfully');
-                print('Attempting navigation to CalendarViewScreen');
+                logger.i('Entry saved successfully');
+                logger.i('Attempting navigation to CalendarViewScreen');
                 if (mounted) {
                   Navigator.pushReplacement(
                     context,
@@ -449,13 +423,6 @@ class _CalendarViewBodyState extends State<_CalendarViewBody> {
       _displayMonth.month + 1,
       0,
     ).day;
-    final entries = box.values
-        .where(
-          (entry) =>
-              entry.date.year == _displayMonth.year &&
-              entry.date.month == _displayMonth.month,
-        )
-        .toList();
 
     // Calculate calendar grid range for full weeks
     final firstWeekday = firstDayOfMonth.weekday % 7; // Sunday=0
