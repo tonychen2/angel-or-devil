@@ -16,5 +16,11 @@ flutter_*.log
 .idea/
 .vscode/
 
+# Flutter generated files
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+.pub-cache/
+
 # Other local files
 pubspec.lock
