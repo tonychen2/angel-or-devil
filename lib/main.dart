@@ -386,7 +386,7 @@ class _DiaryEntryScreenState extends State<DiaryEntryScreen> {
   }
 }
 
-// MVP Screen 3: Monthly Calendar View (placeholder)
+// MVP Screen 3: Monthly Calendar View
 class CalendarViewScreen extends StatelessWidget {
   const CalendarViewScreen({super.key});
 
@@ -546,8 +546,7 @@ class _CalendarViewBodyState extends State<_CalendarViewBody> {
                           },
                     child: LayoutBuilder(
                       builder: (context, constraints) {
-                        double iconSize = 32;
-                        double gap = 2;
+                        double iconSize = 24;
                         return Container(
                           decoration: BoxDecoration(
                             color: isFuture || !isCurrentMonth
@@ -568,8 +567,8 @@ class _CalendarViewBodyState extends State<_CalendarViewBody> {
                           child: Opacity(
                             opacity: isFuture ? 0.5 : 1.0,
                             child: Column(
-                              mainAxisSize: MainAxisSize.min,
-                              mainAxisAlignment: MainAxisAlignment.center,
+                              mainAxisSize: MainAxisSize.max,
+                              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                               children: [
                                 Text(
                                   '$day',
@@ -584,18 +583,20 @@ class _CalendarViewBodyState extends State<_CalendarViewBody> {
                                   textAlign: TextAlign.center,
                                 ),
                                 if (entry != null && !isFuture)
-                                  Padding(
-                                    padding: EdgeInsets.only(top: gap),
+                                  FittedBox(
+                                    fit: BoxFit.scaleDown,
                                     child: entry.isAngel
                                         ? SvgPicture.asset(
                                             'assets/angel.svg',
                                             width: iconSize,
                                             height: iconSize,
+                                            fit: BoxFit.contain,
                                           )
                                         : SvgPicture.asset(
                                             'assets/devil.svg',
                                             width: iconSize,
                                             height: iconSize,
+                                            fit: BoxFit.contain,
                                           ),
                                   ),
                               ],
@@ -663,91 +664,88 @@ class _DayDetailDialogState extends State<_DayDetailDialog> {
         style: const TextStyle(fontWeight: FontWeight.bold),
       ),
       content: SingleChildScrollView(
-        child: ConstrainedBox(
-          constraints: BoxConstraints(maxWidth: 350),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Wrap(
-                alignment: WrapAlignment.center,
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  GestureDetector(
-                    onTap: () {
-                      setState(() {
-                        _isAngel = true;
-                        _edited = true;
-                      });
-                    },
-                    child: Container(
-                      decoration: BoxDecoration(
-                        color: _isAngel
-                            ? Colors.yellow[100]
-                            : Colors.transparent,
-                        border: Border.all(
-                          color: _isAngel ? Colors.yellow[700]! : Colors.grey,
-                          width: 2,
-                        ),
-                        borderRadius: BorderRadius.circular(12),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                GestureDetector(
+                  onTap: () {
+                    setState(() {
+                      _isAngel = true;
+                      _edited = true;
+                    });
+                  },
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: _isAngel
+                          ? Colors.yellow[100]
+                          : Colors.transparent,
+                      border: Border.all(
+                        color: _isAngel ? Colors.yellow[700]! : Colors.grey,
+                        width: 2,
                       ),
-                      padding: const EdgeInsets.all(4),
-                      child: SvgPicture.asset(
-                        'assets/angel.svg',
-                        width: 32,
-                        height: 32,
-                      ),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    padding: const EdgeInsets.all(4),
+                    child: SvgPicture.asset(
+                      'assets/angel.svg',
+                      width: 32,
+                      height: 32,
                     ),
                   ),
-                  GestureDetector(
-                    onTap: () {
-                      setState(() {
-                        _isAngel = false;
-                        _edited = true;
-                      });
-                    },
-                    child: Container(
-                      decoration: BoxDecoration(
-                        color: !_isAngel ? Colors.red[100] : Colors.transparent,
-                        border: Border.all(
-                          color: !_isAngel ? Colors.redAccent : Colors.grey,
-                          width: 2,
-                        ),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      padding: const EdgeInsets.all(4),
-                      child: SvgPicture.asset(
-                        'assets/devil.svg',
-                        width: 32,
-                        height: 32,
-                      ),
-                    ),
-                  ),
-                  SizedBox(
-                    width: 140,
-                    child: Text(
-                      getAngelDevilText(_isAngel, isToday),
-                      softWrap: true,
-                      overflow: TextOverflow.visible,
-                      textAlign: TextAlign.center,
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 8),
-              TextField(
-                controller: _controller,
-                maxLines: 4,
-                decoration: InputDecoration(
-                  border: const OutlineInputBorder(),
-                  hintText: isToday
-                      ? 'What’s on your mind (optional)'
-                      : 'What was on your mind (optional)',
                 ),
+                const SizedBox(width: 16),
+                GestureDetector(
+                  onTap: () {
+                    setState(() {
+                      _isAngel = false;
+                      _edited = true;
+                    });
+                  },
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: !_isAngel ? Colors.red[100] : Colors.transparent,
+                      border: Border.all(
+                        color: !_isAngel ? Colors.redAccent : Colors.grey,
+                        width: 2,
+                      ),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    padding: const EdgeInsets.all(4),
+                    child: SvgPicture.asset(
+                      'assets/devil.svg',
+                      width: 32,
+                      height: 32,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 8.0),
+              child: Text(
+                getAngelDevilText(_isAngel, isToday),
+                softWrap: true,
+                overflow: TextOverflow.visible,
+                textAlign: TextAlign.center,
               ),
-            ],
-          ),
+            ),
+            const SizedBox(height: 8),
+            TextField(
+              controller: _controller,
+              maxLines: 4,
+              decoration: InputDecoration(
+                border: const OutlineInputBorder(),
+                hintText: isToday
+                    ? 'What’s on your mind'
+                    : 'What was on your mind',
+              ),
+            ),
+          ],
         ),
       ),
       actions: [
