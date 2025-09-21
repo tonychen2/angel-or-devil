@@ -91,7 +91,7 @@ Future<void> scheduleDailyAngelDevilNotification() async {
     'Was your baby a little angel or a little devil today?',
     tzScheduledTime,
     details,
-    androidScheduleMode: AndroidScheduleMode.exact,
+    androidScheduleMode: AndroidScheduleMode.inexact,
     matchDateTimeComponents: DateTimeComponents.time, // This makes it repeat daily
     payload: '',
   );
@@ -706,7 +706,6 @@ class _CalendarViewBodyState extends State<_CalendarViewBody> {
                   final date = gridStart.add(Duration(days: index));
                   final isCurrentMonth = date.month == _displayMonth.month;
                   final day = date.day;
-                  // Get entry for any date, not just current month
                   final entry = box.get(date.toIso8601String());
                   final isToday = date == today;
                   final isFuture = date.isAfter(today);
@@ -739,7 +738,9 @@ class _CalendarViewBodyState extends State<_CalendarViewBody> {
                           },
                     child: LayoutBuilder(
                       builder: (context, constraints) {
-                        double iconSize = 24;
+                        // Use a smaller icon size and ensure scaling
+                        double iconSize = constraints.maxWidth * 0.4;
+                        iconSize = iconSize.clamp(16.0, 24.0); // keep icons small
                         return Container(
                           decoration: BoxDecoration(
                             color: isFuture || !isCurrentMonth
@@ -776,21 +777,23 @@ class _CalendarViewBodyState extends State<_CalendarViewBody> {
                                   textAlign: TextAlign.center,
                                 ),
                                 if (entry != null && !isFuture)
-                                  FittedBox(
-                                    fit: BoxFit.scaleDown,
-                                    child: entry.isAngel
-                                        ? SvgPicture.asset(
-                                            'assets/angel.svg',
-                                            width: iconSize,
-                                            height: iconSize,
-                                            fit: BoxFit.contain,
-                                          )
-                                        : SvgPicture.asset(
-                                            'assets/devil.svg',
-                                            width: iconSize,
-                                            height: iconSize,
-                                            fit: BoxFit.contain,
-                                          ),
+                                  SizedBox(
+                                    width: iconSize,
+                                    height: iconSize,
+                                    child: FittedBox(
+                                      fit: BoxFit.contain,
+                                      child: entry.isAngel
+                                          ? SvgPicture.asset(
+                                              'assets/angel.svg',
+                                              width: iconSize,
+                                              height: iconSize,
+                                            )
+                                          : SvgPicture.asset(
+                                              'assets/devil.svg',
+                                              width: iconSize,
+                                              height: iconSize,
+                                            ),
+                                    ),
                                   ),
                               ],
                             ),
