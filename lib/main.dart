@@ -3,10 +3,100 @@ import 'package:flutter_svg/flutter_svg.dart';
 import 'models/entry.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:logger/logger.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:permission_handler/permission_handler.dart';
+import 'package:timezone/timezone.dart' as tz;
+import 'package:timezone/data/latest.dart' as tzdata;
+import 'package:flutter_timezone/flutter_timezone.dart';
 
 final logger = Logger();
+const platform = MethodChannel('angel_or_devil/debug');
+final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin = FlutterLocalNotificationsPlugin();
+final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
+
+Future<void> showImmediateTestNotification() async {
+  const AndroidNotificationDetails androidDetails = AndroidNotificationDetails(
+    'angel_devil_channel',
+    'Angel or Devil',
+    channelDescription: 'Immediate test notification',
+    importance: Importance.max,
+    priority: Priority.high,
+  );
+  final iosDetails = DarwinNotificationDetails(
+    categoryIdentifier: 'angelDevilCategory',
+  );
+  final NotificationDetails details = NotificationDetails(android: androidDetails, iOS: iosDetails);
+  await flutterLocalNotificationsPlugin.show(
+    1,
+    'Angel Baby (Test)',
+    'Immediate test notification',
+    details,
+    payload: '',
+  );
+  logger.i('Immediate test notification posted');
+}
+
+Future<void> initializeNotifications() async {
+  await Permission.notification.request();
+
+  const AndroidInitializationSettings androidInit = AndroidInitializationSettings('@mipmap/ic_launcher');
+  final DarwinInitializationSettings iosInit = DarwinInitializationSettings(
+    notificationCategories: [
+      DarwinNotificationCategory(
+        'angelDevilCategory',
+        actions: [
+          DarwinNotificationAction.plain('angel', 'Angel'),
+          DarwinNotificationAction.plain('devil', 'Devil'),
+        ],
+      ),
+    ],
+  );
+  final InitializationSettings initSettings = InitializationSettings(android: androidInit, iOS: iosInit);
+
+  await flutterLocalNotificationsPlugin.initialize(
+    initSettings,
+    onDidReceiveNotificationResponse: (NotificationResponse response) async {
+      navigatorKey.currentState?.push(
+        MaterialPageRoute(
+          builder: (context) => DailyPromptScreen(),
+        ),
+      );
+    },
+  );
+}
+
+Future<void> scheduleDailyAngelDevilNotification() async {
+  const AndroidNotificationDetails androidDetails = AndroidNotificationDetails(
+    'angel_devil_channel',
+    'Angel or Devil',
+    channelDescription: 'Daily prompt to log your day',
+    importance: Importance.max,
+    priority: Priority.high,
+  );
+  final iosDetails = DarwinNotificationDetails(
+    categoryIdentifier: 'angelDevilCategory',
+  );
+  final NotificationDetails details = NotificationDetails(android: androidDetails, iOS: iosDetails);
+
+  final now = DateTime.now();
+  final time = DateTime(now.year, now.month, now.day, 19, 0); // 7:00 PM
+  // Always schedule for next 7:00 PM
+  var scheduledTime = time.isAfter(now) ? time : time.add(const Duration(days: 1));
+  final tzScheduledTime = tz.TZDateTime.from(scheduledTime, tz.local);
+  await flutterLocalNotificationsPlugin.zonedSchedule(
+    0,
+    'Angel Baby',
+    'Was your baby a little angel or a little devil today?',
+    tzScheduledTime,
+    details,
+    androidScheduleMode: AndroidScheduleMode.exact,
+    matchDateTimeComponents: DateTimeComponents.time, // This makes it repeat daily
+    payload: '',
+  );
+  logger.i('Daily notification scheduled for $tzScheduledTime');
+}
 
 // Shared helper for angel/devil text
 String getAngelDevilText(bool isAngel, bool isToday) {
@@ -21,9 +111,20 @@ String getAngelDevilText(bool isAngel, bool isToday) {
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  tzdata.initializeTimeZones();
+  String localTimeZone = 'UTC';
+  try {
+    localTimeZone = await FlutterTimezone.getLocalTimezone();
+  } catch (e) {
+    // fallback to UTC
+  }
+  tz.setLocalLocation(tz.getLocation(localTimeZone));
   await Hive.initFlutter();
   Hive.registerAdapter(DiaryEntryAdapter());
   await Hive.openBox<DiaryEntry>('entries');
+  await initializeNotifications();
+  await showImmediateTestNotification();
+  await scheduleDailyAngelDevilNotification();
   runApp(const AngelDevilApp());
 }
 
@@ -34,6 +135,7 @@ class AngelDevilApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'Angel or Devil',
+      navigatorKey: navigatorKey,
       theme: ThemeData(
         scaffoldBackgroundColor: const Color(0xFFF8F3E3),
         primaryColor: const Color(0xFF8B6F4E),
@@ -61,40 +163,88 @@ class LaunchDecider extends StatefulWidget {
   State<LaunchDecider> createState() => _LaunchDeciderState();
 }
 
-class _LaunchDeciderState extends State<LaunchDecider> {
-  bool? _firstLaunch;
+class _LaunchDeciderState extends State<LaunchDecider> with WidgetsBindingObserver {
+  bool? _showPrompt;
+  bool _loading = true;
+  Widget? _restoredPage;
 
   @override
   void initState() {
     super.initState();
-    _checkFirstLaunch();
+    WidgetsBinding.instance.addObserver(this);
+    _decideInitialScreen();
   }
 
-  Future<void> _checkFirstLaunch() async {
-    final prefs = await SharedPreferences.getInstance();
-    final seenPrompt = prefs.getBool('seenPrompt') ?? false;
-    setState(() {
-      _firstLaunch = !seenPrompt;
-    });
-    if (!seenPrompt) {
-      await prefs.setBool('seenPrompt', true);
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _checkPromptOnResume();
+    }
+  }
+
+  Future<void> _decideInitialScreen() async {
+    final now = DateTime.now();
+    final fivePM = DateTime(now.year, now.month, now.day, 17, 0);
+    final box = Hive.box<DiaryEntry>('entries');
+    final todayKey = DateTime(now.year, now.month, now.day).toIso8601String();
+    final entry = box.get(todayKey);
+
+    Widget restoredPage = const MainTabView();
+
+    if (now.isAfter(fivePM) && entry == null) {
+      setState(() {
+        _showPrompt = true;
+        _loading = false;
+        _restoredPage = null;
+      });
+    } else {
+      setState(() {
+        _showPrompt = false;
+        _loading = false;
+        _restoredPage = restoredPage;
+      });
+    }
+  }
+
+  Future<void> _checkPromptOnResume() async {
+    final now = DateTime.now();
+    final fivePM = DateTime(now.year, now.month, now.day, 17, 0);
+    final box = Hive.box<DiaryEntry>('entries');
+    final todayKey = DateTime(now.year, now.month, now.day).toIso8601String();
+    final entry = box.get(todayKey);
+    if (now.isAfter(fivePM) && entry == null) {
+      // Only navigate if not already showing prompt
+      if (_showPrompt != true) {
+        setState(() {
+          _showPrompt = true;
+          _restoredPage = null;
+        });
+      }
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    if (_firstLaunch == null) {
+    if (_loading) {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
-    return _firstLaunch!
-        ? DailyPromptScreen(
-            onComplete: () {
-              setState(() {
-                _firstLaunch = false;
-              });
-            },
-          )
-        : const MainTabView();
+    if (_showPrompt == true) {
+      return DailyPromptScreen(
+        onComplete: () {
+          setState(() {
+            _showPrompt = false;
+            _restoredPage = const MainTabView();
+          });
+        },
+      );
+    }
+    return _restoredPage ?? const MainTabView();
   }
 }
 
@@ -167,6 +317,12 @@ class DailyPromptScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final box = Hive.box<DiaryEntry>('entries');
+    final today = DateTime.now();
+    final todayKey = DateTime(today.year, today.month, today.day).toIso8601String();
+    final entry = box.get(todayKey);
+    bool? selected = entry?.isAngel; // null if no entry
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('Angel Baby'),
@@ -187,42 +343,73 @@ class DailyPromptScreen extends StatelessWidget {
                 alignment: WrapAlignment.center,
                 spacing: 24,
                 children: [
-                  IconButton(
-                    icon: SvgPicture.asset(
-                      'assets/angel.svg',
-                      width: 64,
-                      height: 64,
-                    ),
-                    onPressed: () {
+                  GestureDetector(
+                    onTap: () async {
+                      final newEntry = DiaryEntry(
+                        date: DateTime(today.year, today.month, today.day),
+                        isAngel: true,
+                        note: entry?.note ?? '',
+                      );
+                      await box.put(todayKey, newEntry);
                       Navigator.push(
                         context,
                         MaterialPageRoute(
-                          builder: (context) => DiaryEntryScreen(isAngel: true),
+                          builder: (context) => DiaryEntryScreen(isAngel: true, note: newEntry.note),
                         ),
                       ).then((_) {
                         if (onComplete != null) onComplete!();
                       });
                     },
-                    tooltip: 'Angel',
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: selected == true ? Colors.yellow[100] : Colors.transparent,
+                        border: Border.all(
+                          color: selected == true ? Colors.yellow[700]! : Colors.grey,
+                          width: 2,
+                        ),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      padding: const EdgeInsets.all(4),
+                      child: SvgPicture.asset(
+                        'assets/angel.svg',
+                        width: 64,
+                        height: 64,
+                      ),
+                    ),
                   ),
-                  IconButton(
-                    icon: SvgPicture.asset(
-                      'assets/devil.svg',
-                      width: 64,
-                      height: 64,
-                    ),
-                    onPressed: () {
+                  GestureDetector(
+                    onTap: () async {
+                      final newEntry = DiaryEntry(
+                        date: DateTime(today.year, today.month, today.day),
+                        isAngel: false,
+                        note: entry?.note ?? '',
+                      );
+                      await box.put(todayKey, newEntry);
                       Navigator.push(
                         context,
                         MaterialPageRoute(
-                          builder: (context) =>
-                              DiaryEntryScreen(isAngel: false),
+                          builder: (context) => DiaryEntryScreen(isAngel: false, note: newEntry.note),
                         ),
                       ).then((_) {
                         if (onComplete != null) onComplete!();
                       });
                     },
-                    tooltip: 'Devil',
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: selected == false ? Colors.red[100] : Colors.transparent,
+                        border: Border.all(
+                          color: selected == false ? Colors.redAccent : Colors.grey,
+                          width: 2,
+                        ),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      padding: const EdgeInsets.all(4),
+                      child: SvgPicture.asset(
+                        'assets/devil.svg',
+                        width: 64,
+                        height: 64,
+                      ),
+                    ),
                   ),
                 ],
               ),
@@ -237,21 +424,27 @@ class DailyPromptScreen extends StatelessWidget {
 // MVP Screen 2: Optional Diary Entry
 class DiaryEntryScreen extends StatefulWidget {
   final bool isAngel;
-  const DiaryEntryScreen({super.key, required this.isAngel});
+  final String note;
+  const DiaryEntryScreen({super.key, required this.isAngel, this.note = ''});
 
   @override
   State<DiaryEntryScreen> createState() => _DiaryEntryScreenState();
 }
 
 class _DiaryEntryScreenState extends State<DiaryEntryScreen> {
-  final TextEditingController _controller = TextEditingController();
+  late TextEditingController _controller;
 
   bool _isAngelSelected = true;
 
   @override
   void initState() {
     super.initState();
-    _isAngelSelected = widget.isAngel;
+    final box = Hive.box<DiaryEntry>('entries');
+    final today = DateTime.now();
+    final todayKey = DateTime(today.year, today.month, today.day).toIso8601String();
+    final entry = box.get(todayKey);
+    _isAngelSelected = entry?.isAngel ?? widget.isAngel;
+    _controller = TextEditingController(text: entry?.note ?? widget.note);
   }
 
   @override

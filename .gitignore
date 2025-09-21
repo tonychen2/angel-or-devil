@@ -21,6 +21,8 @@ flutter_*.log
 .flutter-plugins-dependencies
 .packages
 .pub-cache/
+*generated*
+*Generated*
 
 # Other local files
 pubspec.lock
