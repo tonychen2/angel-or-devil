@@ -11,29 +11,95 @@ import 'package:timezone/timezone.dart' as tz;
 import 'package:timezone/data/latest.dart' as tzdata;
 import 'package:flutter_timezone/flutter_timezone.dart';
 
+// Constants
+const String kNotificationChannelId = 'angel_devil_channel';
+const String kNotificationChannelName = 'Angel or Devil';
+const String kIosNotificationCategory = 'angelDevilCategory';
+const String kHiveBoxName = 'entries';
+
+class _AppConstants {
+  // Colors
+  static const Color primaryColor = Color(0xFF8B6F4E);
+  static const Color scaffoldBackground = Color(0xFFF8F3E3);
+  static const Color appBarForeground = Color(0xFFF8F3E3);
+  static const Color unselectedNavItemColor = Color(0xFFBCA18A);
+
+  static const Color defaultIconBorder = Colors.grey;
+  static const Color unselectedNewEntryIconBorder = Color(0xFFBDBDBD);
+
+  static const Color angelIconSelectedBg = Color(0xFFFFF9C4);
+  static const Color angelIconSelectedBorder = Color(0xFFFBC02D);
+  static const Color devilIconSelectedBg = Color(0xFFFFCDD2);
+  static const Color devilIconSelectedBorder = Colors.redAccent;
+
+  static const Color calendarAdjacentMonthDayBg = Color(0xFFF3E9D7);
+  static const Color calendarTodayCellBg = Color(0xFFEAD7B7);
+  static const Color calendarDefaultCellBg = scaffoldBackground; 
+  static const Color calendarTodayText = Color(0xFF6E2C00);
+  static const Color calendarAdjacentMonthBorder = Color(0xFFBCA18A);
+  static const Color calendarDefaultText = primaryColor;
+
+  // Spacing & Sizing
+  static const double spacingSmall = 8.0;
+  static const double spacingMedium = 16.0;
+  static const double spacingLarge = 24.0;
+  static const double spacingXLarge = 32.0;
+
+  static const double dialogIconSize = 32.0;
+  static const double promptIconSize = 64.0;
+  static const double diaryEntryScreenIconSize = 48.0;
+  static const double calendarGridIconMinSize = 16.0;
+  static const double calendarGridIconMaxSize = 24.0;
+  static const double calendarGridIconScaleFactor = 0.4;
+
+  // Numerical Constants
+  static const int promptEligibilityHour = 17; // 5 PM
+  static const int dailyNotificationHour = 19; // 7 PM
+  static const int dailyNotificationId = 0;
+  static const int testNotificationId = 1;
+  static const int navigatorPushDelayMillis = 500;
+
+  // Text
+  static const String appTitle = 'Angel or Devil';
+  static const String insightScreenTitle = 'Insight';
+  static const String dailyPromptScreenTitle = 'Angel Baby';
+  static const String diaryEntryScreenTitle = 'Diary Entry';
+  static const String monthlyCalendarScreenTitle = 'Monthly Calendar';
+
+  static const List<String> weekDayLabels = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
+}
+
+// Helper for DateTime to get date part only, and for consistent Hive keys
+extension DateTimeExtension on DateTime {
+  DateTime get dateOnly => DateTime(year, month, day);
+  String get toHiveKey => dateOnly.toIso8601String();
+}
+
 final logger = Logger();
-const platform = MethodChannel('angel_or_devil/debug');
-final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin = FlutterLocalNotificationsPlugin();
+const platform = MethodChannel('angel_or_devil/debug'); // Keep as is if used by native side
+final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin =
+    FlutterLocalNotificationsPlugin();
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
 Future<void> showImmediateTestNotification() async {
   const AndroidNotificationDetails androidDetails = AndroidNotificationDetails(
-    'angel_devil_channel',
-    'Angel or Devil',
+    kNotificationChannelId,
+    kNotificationChannelName,
     channelDescription: 'Immediate test notification',
     importance: Importance.max,
     priority: Priority.high,
   );
-  final iosDetails = DarwinNotificationDetails(
-    categoryIdentifier: 'angelDevilCategory',
+  const DarwinNotificationDetails iosDetails = DarwinNotificationDetails(
+    categoryIdentifier: kIosNotificationCategory,
   );
-  final NotificationDetails details = NotificationDetails(android: androidDetails, iOS: iosDetails);
+  const NotificationDetails details =
+      NotificationDetails(android: androidDetails, iOS: iosDetails);
   await flutterLocalNotificationsPlugin.show(
-    1,
-    'Angel Baby (Test)',
+    _AppConstants.testNotificationId,
+    'Angel Baby (Test)', // Specific title for test notification
     'Immediate test notification',
     details,
-    payload: '',
+    payload: '', // Consider defining a constant if payload structure becomes complex
   );
   logger.i('Immediate test notification posted');
 }
@@ -41,26 +107,29 @@ Future<void> showImmediateTestNotification() async {
 Future<void> initializeNotifications() async {
   await Permission.notification.request();
 
-  const AndroidInitializationSettings androidInit = AndroidInitializationSettings('@mipmap/ic_launcher');
+  const AndroidInitializationSettings androidInit =
+      AndroidInitializationSettings('@mipmap/ic_launcher'); // Keep as is, specific to Android
   final DarwinInitializationSettings iosInit = DarwinInitializationSettings(
     notificationCategories: [
       DarwinNotificationCategory(
-        'angelDevilCategory',
+        kIosNotificationCategory,
         actions: [
-          DarwinNotificationAction.plain('angel', 'Angel'),
+          DarwinNotificationAction.plain('angel', 'Angel'), // These could be consts too
           DarwinNotificationAction.plain('devil', 'Devil'),
         ],
       ),
     ],
   );
-  final InitializationSettings initSettings = InitializationSettings(android: androidInit, iOS: iosInit);
+  final InitializationSettings initSettings =
+      InitializationSettings(android: androidInit, iOS: iosInit);
 
   await flutterLocalNotificationsPlugin.initialize(
     initSettings,
     onDidReceiveNotificationResponse: (NotificationResponse response) async {
       logger.i("Notification tapped! Payload: ${response.payload}");
 
-      await Future.delayed(const Duration(milliseconds: 500));
+      await Future.delayed(
+          const Duration(milliseconds: _AppConstants.navigatorPushDelayMillis));
 
       if (navigatorKey.currentState != null) {
         navigatorKey.currentState!.pushAndRemoveUntil(
@@ -69,21 +138,26 @@ Future<void> initializeNotifications() async {
               onComplete: () {
                 if (navigatorKey.currentState != null) {
                   navigatorKey.currentState!.pushAndRemoveUntil(
-                    MaterialPageRoute(builder: (context) => const MainTabView()),
+                    MaterialPageRoute(
+                        builder: (context) => const MainTabView()),
                     (Route<dynamic> route) => false,
                   );
-                  logger.i("DailyPromptScreen (from notification) completed. Navigated to MainTabView.");
+                  logger.i(
+                      "DailyPromptScreen (from notification) completed. Navigated to MainTabView.");
                 } else {
-                  logger.e("Navigator state was null when trying to navigate from DailyPromptScreen's onComplete (notification context).");
+                  logger.e(
+                      "Navigator state was null when trying to navigate from DailyPromptScreen's onComplete (notification context).");
                 }
               },
             ),
           ),
           (Route<dynamic> route) => false,
         );
-        logger.i("Successfully pushed DailyPromptScreen (from notification) and removed previous routes.");
+        logger.i(
+            "Successfully pushed DailyPromptScreen (from notification) and removed previous routes.");
       } else {
-        logger.e("Navigator state was null when trying to push from notification. Navigation failed.");
+        logger.e(
+            "Navigator state was null when trying to push from notification. Navigation failed.");
       }
     },
   );
@@ -91,52 +165,56 @@ Future<void> initializeNotifications() async {
 
 Future<void> scheduleDailyAngelDevilNotification() async {
   const AndroidNotificationDetails androidDetails = AndroidNotificationDetails(
-    'angel_devil_channel',
-    'Angel or Devil',
+    kNotificationChannelId,
+    kNotificationChannelName,
     channelDescription: 'Daily prompt to log your day',
     importance: Importance.max,
     priority: Priority.high,
   );
-  final iosDetails = DarwinNotificationDetails(
-    categoryIdentifier: 'angelDevilCategory',
+  const DarwinNotificationDetails iosDetails = DarwinNotificationDetails(
+    categoryIdentifier: kIosNotificationCategory,
   );
-  final NotificationDetails details = NotificationDetails(android: androidDetails, iOS: iosDetails);
+  const NotificationDetails details =
+      NotificationDetails(android: androidDetails, iOS: iosDetails);
 
   final now = DateTime.now();
-  final time = DateTime(now.year, now.month, now.day, 19, 0);
+  final time = DateTime(now.year, now.month, now.day, _AppConstants.dailyNotificationHour);
   var scheduledTime = time.isAfter(now) ? time : time.add(const Duration(days: 1));
   final tzScheduledTime = tz.TZDateTime.from(scheduledTime, tz.local);
 
-  await flutterLocalNotificationsPlugin.cancel(0);
-  logger.i('Cancelled any existing daily notification with ID 0.');
+  await flutterLocalNotificationsPlugin.cancel(_AppConstants.dailyNotificationId);
+  logger.i(
+      'Cancelled any existing daily notification with ID ${_AppConstants.dailyNotificationId}.');
 
   await flutterLocalNotificationsPlugin.zonedSchedule(
-    0,
-    'Angel Baby',
-    'Was your baby a little angel or a little devil today?',
+    _AppConstants.dailyNotificationId,
+    _AppConstants.dailyPromptScreenTitle,
+    'Was your baby a little angel or a little devil today?', // This string can be a const too
     tzScheduledTime,
     details,
     androidScheduleMode: AndroidScheduleMode.inexact,
     matchDateTimeComponents: DateTimeComponents.time,
     payload: '',
   );
-  logger.i('Daily notification scheduled for $tzScheduledTime with ID 0.');
+  logger.i(
+      'Daily notification scheduled for $tzScheduledTime with ID ${_AppConstants.dailyNotificationId}.');
 }
 
 String getAngelDevilText(bool isAngel, bool isToday) {
+  // These strings are good candidates for constants if they are used elsewhere or for localization
   return isToday
       ? isAngel
-            ? 'Hoo-ray! What an angel baby you have'
-            : 'Ah little devil! Parenting is hard for everyone so don’t be too harsh on yourself. Perhaps tomorrow will be a better day?'
+          ? 'Hoo-ray! What an angel baby you have'
+          : 'Ah little devil! Parenting is hard for everyone so don’t be too harsh on yourself. Perhaps tomorrow will be a better day?'
       : isAngel
-      ? 'Angel Day'
-      : 'Devil Day';
+          ? 'Angel Day'
+          : 'Devil Day';
 }
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   tzdata.initializeTimeZones();
-  String localTimeZone = 'UTC';
+  String localTimeZone = 'UTC'; // Default timezone
   try {
     localTimeZone = await FlutterTimezone.getLocalTimezone();
   } catch (e) {
@@ -145,9 +223,9 @@ Future<void> main() async {
   tz.setLocalLocation(tz.getLocation(localTimeZone));
   await Hive.initFlutter();
   Hive.registerAdapter(DiaryEntryAdapter());
-  await Hive.openBox<DiaryEntry>('entries');
+  await Hive.openBox<DiaryEntry>(kHiveBoxName);
   await initializeNotifications();
-  await showImmediateTestNotification();
+  // await showImmediateTestNotification(); // Call this only when needed for testing
   await scheduleDailyAngelDevilNotification();
   runApp(const AngelDevilApp());
 }
@@ -158,21 +236,23 @@ class AngelDevilApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Angel or Devil',
+      title: _AppConstants.appTitle,
       navigatorKey: navigatorKey,
       theme: ThemeData(
-        scaffoldBackgroundColor: const Color(0xFFF8F3E3),
-        primaryColor: const Color(0xFF8B6F4E),
+        scaffoldBackgroundColor: _AppConstants.scaffoldBackground,
+        primaryColor: _AppConstants.primaryColor,
         appBarTheme: const AppBarTheme(
-          backgroundColor: Color(0xFF8B6F4E),
-          foregroundColor: Color(0xFFF8F3E3),
+          backgroundColor: _AppConstants.primaryColor,
+          foregroundColor: _AppConstants.appBarForeground,
           elevation: 0,
         ),
-        textTheme: GoogleFonts.patrickHandTextTheme(),
+        textTheme: GoogleFonts.patrickHandTextTheme(
+          Theme.of(context).textTheme.apply(bodyColor: _AppConstants.primaryColor, displayColor: _AppConstants.primaryColor)
+        ),
         fontFamily: GoogleFonts.patrickHand().fontFamily,
         colorScheme: ColorScheme.fromSwatch().copyWith(
-          primary: const Color(0xFF8B6F4E),
-          secondary: const Color(0xFF8B6F4E),
+          primary: _AppConstants.primaryColor,
+          secondary: _AppConstants.primaryColor, 
         ),
       ),
       home: const LaunchDecider(),
@@ -209,7 +289,8 @@ class _LaunchDeciderState extends State<LaunchDecider> with WidgetsBindingObserv
   Future<void> didChangeAppLifecycleState(AppLifecycleState state) async {
     super.didChangeAppLifecycleState(state);
     if (state == AppLifecycleState.resumed) {
-      logger.i('App resumed. Re-evaluating prompt and re-scheduling daily notification.');
+      logger.i(
+          'App resumed. Re-evaluating prompt and re-scheduling daily notification.');
       await _checkPromptOnResume();
       await scheduleDailyAngelDevilNotification();
     }
@@ -217,40 +298,46 @@ class _LaunchDeciderState extends State<LaunchDecider> with WidgetsBindingObserv
 
   Future<void> _decideInitialScreen() async {
     final now = DateTime.now();
-    final fivePM = DateTime(now.year, now.month, now.day, 17, 0);
-    final box = Hive.box<DiaryEntry>('entries');
-    final todayKey = DateTime(now.year, now.month, now.day).toIso8601String();
+    final promptTime = DateTime(now.year, now.month, now.day, _AppConstants.promptEligibilityHour);
+    final box = Hive.box<DiaryEntry>(kHiveBoxName);
+    final todayKey = now.toHiveKey;
     final entry = box.get(todayKey);
 
     Widget restoredPage = const MainTabView();
 
-    if (now.isAfter(fivePM) && entry == null) {
-      setState(() {
-        _showPrompt = true;
-        _loading = false;
-        _restoredPage = null;
-      });
+    if (now.isAfter(promptTime) && entry == null) {
+      if(mounted) {
+        setState(() {
+          _showPrompt = true;
+          _loading = false;
+          _restoredPage = null;
+        });
+      }
     } else {
-      setState(() {
-        _showPrompt = false;
-        _loading = false;
-        _restoredPage = restoredPage;
-      });
+      if(mounted) {
+        setState(() {
+          _showPrompt = false;
+          _loading = false;
+          _restoredPage = restoredPage;
+        });
+      }
     }
   }
 
   Future<void> _checkPromptOnResume() async {
     final now = DateTime.now();
-    final fivePM = DateTime(now.year, now.month, now.day, 17, 0);
-    final box = Hive.box<DiaryEntry>('entries');
-    final todayKey = DateTime(now.year, now.month, now.day).toIso8601String();
+    final promptTime = DateTime(now.year, now.month, now.day, _AppConstants.promptEligibilityHour);
+    final box = Hive.box<DiaryEntry>(kHiveBoxName);
+    final todayKey = now.toHiveKey;
     final entry = box.get(todayKey);
-    if (now.isAfter(fivePM) && entry == null) {
+    if (now.isAfter(promptTime) && entry == null) {
       if (_showPrompt != true) {
-        setState(() {
-          _showPrompt = true;
-          _restoredPage = null;
-        });
+        if(mounted) {
+          setState(() {
+            _showPrompt = true;
+            _restoredPage = null;
+          });
+        }
       }
     }
   }
@@ -258,15 +345,17 @@ class _LaunchDeciderState extends State<LaunchDecider> with WidgetsBindingObserv
   @override
   Widget build(BuildContext context) {
     if (_loading) {
-      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+      return const Scaffold(body: Center(child: CircularProgressIndicator(color: _AppConstants.primaryColor)));
     }
     if (_showPrompt == true) {
       return DailyPromptScreen(
         onComplete: () {
-          setState(() {
-            _showPrompt = false;
-            _restoredPage = const MainTabView();
-          });
+          if(mounted) {
+            setState(() {
+              _showPrompt = false;
+              _restoredPage = const MainTabView();
+            });
+          }
         },
       );
     }
@@ -284,20 +373,28 @@ class MainTabView extends StatefulWidget {
 class _MainTabViewState extends State<MainTabView> {
   int _selectedIndex = 0;
 
+  // It's good practice to make this static const if the children don't depend on initState or build context.
+  static const List<Widget> _widgetOptions = <Widget>[
+    CalendarViewScreen(),
+    InsightPlaceholderScreen(),
+  ];
+
+  void _onItemTapped(int index) {
+    setState(() {
+      _selectedIndex = index;
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       body: IndexedStack(
         index: _selectedIndex,
-        children: const [CalendarViewScreen(), InsightPlaceholderScreen()],
+        children: _widgetOptions,
       ),
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _selectedIndex,
-        onTap: (index) {
-          setState(() {
-            _selectedIndex = index;
-          });
-        },
+        onTap: _onItemTapped,
         items: const [
           BottomNavigationBarItem(
             icon: Icon(Icons.calendar_today),
@@ -308,9 +405,9 @@ class _MainTabViewState extends State<MainTabView> {
             label: 'Insight',
           ),
         ],
-        selectedItemColor: Color(0xFF8B6F4E),
-        unselectedItemColor: Color(0xFFBCA18A),
-        backgroundColor: Color(0xFFF8F3E3),
+        selectedItemColor: _AppConstants.primaryColor,
+        unselectedItemColor: _AppConstants.unselectedNavItemColor,
+        backgroundColor: _AppConstants.scaffoldBackground,
       ),
     );
   }
@@ -323,12 +420,12 @@ class InsightPlaceholderScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Insight'),
-        backgroundColor: const Color(0xFF8B6F4E),
+        title: const Text(_AppConstants.insightScreenTitle),
+        // backgroundColor will be inherited from ThemeData.appBarTheme
       ),
       body: const Center(
         child: Text(
-          'Coming soon...',
+          'Coming soon...', // This could also be a constant
           style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
         ),
       ),
@@ -342,19 +439,17 @@ class DailyPromptScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final box = Hive.box<DiaryEntry>('entries');
-    final today = DateTime.now();
-    final todayKey = DateTime(today.year, today.month, today.day).toIso8601String();
-    final entry = box.get(todayKey);
-    bool? selected = entry?.isAngel;
+    final box = Hive.box<DiaryEntry>(kHiveBoxName);
+    final today = DateTime.now().dateOnly;
+    final entry = box.get(today.toHiveKey);
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Angel Baby'),
-        backgroundColor: Colors.brown,
+        title: const Text(_AppConstants.dailyPromptScreenTitle),
       ),
       body: Center(
         child: SingleChildScrollView(
+          padding: const EdgeInsets.all(_AppConstants.spacingMedium),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
@@ -363,79 +458,14 @@ class DailyPromptScreen extends StatelessWidget {
                 style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
                 textAlign: TextAlign.center,
               ),
-              const SizedBox(height: 32),
+              const SizedBox(height: _AppConstants.spacingXLarge),
               Wrap(
                 alignment: WrapAlignment.center,
-                spacing: 24,
+                spacing: _AppConstants.spacingLarge,
+                runSpacing: _AppConstants.spacingLarge, // Added for better wrap on small screens
                 children: [
-                  GestureDetector(
-                    onTap: () async {
-                      final newEntry = DiaryEntry(
-                        date: DateTime(today.year, today.month, today.day),
-                        isAngel: true,
-                        note: entry?.note ?? '',
-                      );
-                      await box.put(todayKey, newEntry);
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => DiaryEntryScreen(isAngel: true, note: newEntry.note),
-                        ),
-                      ).then((_) {
-                        if (onComplete != null) onComplete!();
-                      });
-                    },
-                    child: Container(
-                      decoration: BoxDecoration(
-                        color: selected == true ? Colors.yellow[100] : Colors.transparent,
-                        border: Border.all(
-                          color: selected == true ? Colors.yellow[700]! : Colors.grey,
-                          width: 2,
-                        ),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      padding: const EdgeInsets.all(4),
-                      child: SvgPicture.asset(
-                        'assets/angel.svg',
-                        width: 64,
-                        height: 64,
-                      ),
-                    ),
-                  ),
-                  GestureDetector(
-                    onTap: () async {
-                      final newEntry = DiaryEntry(
-                        date: DateTime(today.year, today.month, today.day),
-                        isAngel: false,
-                        note: entry?.note ?? '',
-                      );
-                      await box.put(todayKey, newEntry);
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => DiaryEntryScreen(isAngel: false, note: newEntry.note),
-                        ),
-                      ).then((_) {
-                        if (onComplete != null) onComplete!();
-                      });
-                    },
-                    child: Container(
-                      decoration: BoxDecoration(
-                        color: selected == false ? Colors.red[100] : Colors.transparent,
-                        border: Border.all(
-                          color: selected == false ? Colors.redAccent : Colors.grey,
-                          width: 2,
-                        ),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      padding: const EdgeInsets.all(4),
-                      child: SvgPicture.asset(
-                        'assets/devil.svg',
-                        width: 64,
-                        height: 64,
-                      ),
-                    ),
-                  ),
+                  _buildChoiceButton(context, box, today, entry, true),
+                  _buildChoiceButton(context, box, today, entry, false),
                 ],
               ),
             ],
@@ -444,11 +474,64 @@ class DailyPromptScreen extends StatelessWidget {
       ),
     );
   }
+
+  Widget _buildChoiceButton(
+    BuildContext context,
+    Box<DiaryEntry> box,
+    DateTime today,
+    DiaryEntry? currentEntry,
+    bool isAngelChoice,
+  ) {
+    final String assetPath = isAngelChoice ? 'assets/angel.svg' : 'assets/devil.svg';
+    // Check if the current entry's choice matches this button's choice
+    final bool isButtonSelected = currentEntry?.isAngel == isAngelChoice;
+
+    return GestureDetector(
+      onTap: () async {
+        final newEntry = DiaryEntry(
+          date: today,
+          isAngel: isAngelChoice,
+          note: currentEntry?.note ?? '',
+        );
+        await box.put(today.toHiveKey, newEntry);
+        // It's generally better to pass the full date to DiaryEntryScreen if it might be needed
+        // but current implementation of DiaryEntryScreen fetches today's entry again.
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => DiaryEntryScreen(isAngel: isAngelChoice, note: newEntry.note),
+          ),
+        ).then((_) {
+          if (onComplete != null) onComplete!();
+        });
+      },
+      child: Container(
+        decoration: BoxDecoration(
+          color: isButtonSelected
+              ? (isAngelChoice ? _AppConstants.angelIconSelectedBg : _AppConstants.devilIconSelectedBg)
+              : Colors.transparent,
+          border: Border.all(
+            color: isButtonSelected
+                ? (isAngelChoice ? _AppConstants.angelIconSelectedBorder : _AppConstants.devilIconSelectedBorder)
+                : _AppConstants.defaultIconBorder,
+            width: 2,
+          ),
+          borderRadius: BorderRadius.circular(12), // This could be a const (_AppConstants.borderRadiusMedium)
+        ),
+        padding: const EdgeInsets.all(_AppConstants.spacingSmall),
+        child: SvgPicture.asset(
+          assetPath,
+          width: _AppConstants.promptIconSize,
+          height: _AppConstants.promptIconSize,
+        ),
+      ),
+    );
+  }
 }
 
 class DiaryEntryScreen extends StatefulWidget {
-  final bool isAngel;
-  final String note;
+  final bool isAngel; // Initial angel/devil choice from prompt screen
+  final String note;  // Initial note from prompt screen
   const DiaryEntryScreen({super.key, required this.isAngel, this.note = ''});
 
   @override
@@ -457,83 +540,65 @@ class DiaryEntryScreen extends StatefulWidget {
 
 class _DiaryEntryScreenState extends State<DiaryEntryScreen> {
   late TextEditingController _controller;
-  bool _isAngelSelected = true;
+  late bool _isAngelSelected; // Current selection state on this screen
 
   @override
   void initState() {
     super.initState();
-    final box = Hive.box<DiaryEntry>('entries');
-    final today = DateTime.now();
-    final todayKey = DateTime(today.year, today.month, today.day).toIso8601String();
-    final entry = box.get(todayKey);
-    _isAngelSelected = entry?.isAngel ?? widget.isAngel;
-    _controller = TextEditingController(text: entry?.note ?? widget.note);
+    // Initialize with values passed from DailyPromptScreen
+    _isAngelSelected = widget.isAngel;
+    _controller = TextEditingController(text: widget.note);
+
+    // Potentially override with persisted data if user navigates back and then to this screen again
+    // for the *same day* if the DiaryEntryScreen is somehow kept in stack or re-created for today.
+    // However, the current navigation flow from DailyPromptScreen to here, and then to MainTabView,
+    // typically means this screen is fresh. But this check adds robustness.
+    final box = Hive.box<DiaryEntry>(kHiveBoxName);
+    final todayKey = DateTime.now().toHiveKey;
+    final persistedEntryForToday = box.get(todayKey);
+
+    if (persistedEntryForToday != null) {
+      _isAngelSelected = persistedEntryForToday.isAngel;
+      // Preserve text if user already started typing on this screen, otherwise use persisted note.
+      if (_controller.text.isEmpty && persistedEntryForToday.note.isNotEmpty) {
+        _controller.text = persistedEntryForToday.note;
+      }
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Diary Entry'),
-        backgroundColor: Colors.brown,
+        title: const Text(_AppConstants.diaryEntryScreenTitle),
       ),
       body: Center(
         child: Padding(
-          padding: const EdgeInsets.all(16.0),
+          padding: const EdgeInsets.all(_AppConstants.spacingMedium),
           child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 400),
+            constraints: const BoxConstraints(maxWidth: 400), // Good for responsiveness
             child: SingleChildScrollView(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   Wrap(
                     alignment: WrapAlignment.center,
-                    spacing: 12,
-                    runSpacing: 8,
+                    spacing: _AppConstants.spacingMedium,
+                    runSpacing: _AppConstants.spacingSmall,
                     children: [
-                      GestureDetector(
-                        onTap: () {
-                          setState(() {
-                            _isAngelSelected = true;
-                          });
-                        },
-                        child: Container(
-                          decoration: BoxDecoration(
-                            color: _isAngelSelected ? Colors.yellow[100] : Colors.transparent,
-                            border: Border.all(
-                              color: _isAngelSelected ? Colors.yellow[700]! : Colors.grey,
-                              width: 2,
-                            ),
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          padding: const EdgeInsets.all(4),
-                          child: SvgPicture.asset('assets/angel.svg', width: 48, height: 48),
-                        ),
-                      ),
-                      GestureDetector(
-                        onTap: () {
-                          setState(() {
-                            _isAngelSelected = false;
-                          });
-                        },
-                        child: Container(
-                          decoration: BoxDecoration(
-                            color: !_isAngelSelected ? Colors.red[100] : Colors.transparent,
-                            border: Border.all(
-                              color: !_isAngelSelected ? Colors.redAccent : Colors.grey,
-                              width: 2,
-                            ),
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          padding: const EdgeInsets.all(4),
-                          child: SvgPicture.asset('assets/devil.svg', width: 48, height: 48),
-                        ),
-                      ),
+                      _buildSelectionIcon(true),
+                      _buildSelectionIcon(false),
                       SizedBox(
-                        width: 180,
+                        width: 180, // Specific width from original design
                         child: Text(
-                          getAngelDevilText(_isAngelSelected, true),
-                          style: const TextStyle(fontSize: 18),
+                          getAngelDevilText(_isAngelSelected, true), // This screen is always for 'today'
+                          style: const TextStyle(fontSize: 18), // Consider making this const if not themed
                           softWrap: true,
                           overflow: TextOverflow.visible,
                           textAlign: TextAlign.center,
@@ -541,43 +606,77 @@ class _DiaryEntryScreenState extends State<DiaryEntryScreen> {
                       ),
                     ],
                   ),
-                  const SizedBox(height: 24),
-                  const Text('What’s on your mind?'),
+                  const SizedBox(height: _AppConstants.spacingLarge),
+                  const Text('What’s on your mind?'), // Could be a const
                   TextField(
                     controller: _controller,
                     maxLines: 4,
                     decoration: const InputDecoration(
                       border: OutlineInputBorder(),
-                      hintText: 'Write a few words/sentences... (optional)',
+                      hintText: 'Write a few words/sentences... (optional)', // Could be a const
                     ),
                   ),
-                  const SizedBox(height: 24),
+                  const SizedBox(height: _AppConstants.spacingLarge),
                   ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                        backgroundColor: _AppConstants.primaryColor,
+                        foregroundColor: _AppConstants.appBarForeground),
                     onPressed: () async {
-                      final box = Hive.box<DiaryEntry>('entries');
-                      final today = DateTime.now();
+                      final box = Hive.box<DiaryEntry>(kHiveBoxName);
+                      final today = DateTime.now().dateOnly;
                       final entry = DiaryEntry(
-                        date: DateTime(today.year, today.month, today.day),
+                        date: today,
                         isAngel: _isAngelSelected,
                         note: _controller.text.trim(),
                       );
-                      await box.put(entry.date.toIso8601String(), entry);
-                      logger.i('Entry saved successfully');
+                      await box.put(today.toHiveKey, entry);
+                      logger.i('Entry saved successfully from DiaryEntryScreen');
                       if (mounted) {
-                        // Navigate back to the main flow, which should be MainTabView -> CalendarViewScreen
-                        // Clearing the stack until MainTabView ensures a clean state.
-                         Navigator.of(context).pushAndRemoveUntil(
-                            MaterialPageRoute(builder: (context) => const MainTabView()),
-                            (Route<dynamic> route) => false,
-                         );
+                        Navigator.of(context).pushAndRemoveUntil(
+                          MaterialPageRoute(builder: (context) => const MainTabView()),
+                          (Route<dynamic> route) => false,
+                        );
                       }
                     },
-                    child: const Text('Save'),
+                    child: const Text('Save'), // Could be a const
                   ),
                 ],
               ),
             ),
           ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSelectionIcon(bool isAngelChoice) {
+    final bool isSelected = _isAngelSelected == isAngelChoice;
+    return GestureDetector(
+      onTap: () {
+        if (_isAngelSelected != isAngelChoice) {
+            setState(() {
+                _isAngelSelected = isAngelChoice;
+            });
+        }
+      },
+      child: Container(
+        decoration: BoxDecoration(
+          color: isSelected
+              ? (isAngelChoice ? _AppConstants.angelIconSelectedBg : _AppConstants.devilIconSelectedBg)
+              : Colors.transparent,
+          border: Border.all(
+            color: isSelected
+                ? (isAngelChoice ? _AppConstants.angelIconSelectedBorder : _AppConstants.devilIconSelectedBorder)
+                : _AppConstants.defaultIconBorder,
+            width: 2,
+          ),
+          borderRadius: BorderRadius.circular(12), // Could be _AppConstants.borderRadiusMedium
+        ),
+        padding: const EdgeInsets.all(_AppConstants.spacingSmall),
+        child: SvgPicture.asset(
+          isAngelChoice ? 'assets/angel.svg' : 'assets/devil.svg',
+          width: _AppConstants.diaryEntryScreenIconSize,
+          height: _AppConstants.diaryEntryScreenIconSize,
         ),
       ),
     );
@@ -589,12 +688,12 @@ class CalendarViewScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const _CalendarViewBody();
+    return const _CalendarViewBody(); // Made _CalendarViewBody const
   }
 }
 
 class _CalendarViewBody extends StatefulWidget {
-  const _CalendarViewBody({super.key});
+  const _CalendarViewBody({super.key}); // Added const constructor
 
   @override
   State<_CalendarViewBody> createState() => _CalendarViewBodyState();
@@ -606,8 +705,7 @@ class _CalendarViewBodyState extends State<_CalendarViewBody> with WidgetsBindin
   @override
   void initState() {
     super.initState();
-    final now = DateTime.now();
-    _displayMonth = DateTime(now.year, now.month);
+    _displayMonth = DateTime.now().dateOnly.copyWith(day: 1);
     WidgetsBinding.instance.addObserver(this);
   }
 
@@ -621,150 +719,185 @@ class _CalendarViewBodyState extends State<_CalendarViewBody> with WidgetsBindin
   void didChangeAppLifecycleState(AppLifecycleState state) {
     super.didChangeAppLifecycleState(state);
     if (state == AppLifecycleState.resumed) {
-      final now = DateTime.now();
-      setState(() {
-        _displayMonth = DateTime(now.year, now.month);
-      });
+      if (mounted) {
+        setState(() {
+          // Refresh to current month if app is resumed, useful if it was backgrounded for a long time
+          _displayMonth = DateTime.now().dateOnly.copyWith(day: 1);
+        });
+      }
     }
   }
 
   void _changeMonth(int offset) {
-    setState(() {
-      _displayMonth = DateTime(_displayMonth.year, _displayMonth.month + offset);
-    });
+    if (mounted) {
+      setState(() {
+        _displayMonth = DateTime(_displayMonth.year, _displayMonth.month + offset, 1);
+      });
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    final box = Hive.box<DiaryEntry>('entries');
-    final now = DateTime.now();
-    final today = DateTime(now.year, now.month, now.day);
-    final firstDayOfMonth = DateTime(_displayMonth.year, _displayMonth.month, 1);
-    final daysInMonth = DateTime(_displayMonth.year, _displayMonth.month + 1, 0).day;
+    final box = Hive.box<DiaryEntry>(kHiveBoxName);
+    final today = DateTime.now().dateOnly;
 
-    final firstWeekday = firstDayOfMonth.weekday % 7;
-    final lastDayOfMonth = DateTime(_displayMonth.year, _displayMonth.month, daysInMonth);
-    final lastWeekday = lastDayOfMonth.weekday % 7;
-    final gridStart = firstDayOfMonth.subtract(Duration(days: firstWeekday));
-    final gridEnd = lastDayOfMonth.add(Duration(days: 6 - lastWeekday));
-    final totalDays = gridEnd.difference(gridStart).inDays + 1;
-    final weekDays = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
+    final firstDayOfDisplayMonth = _displayMonth;
+    final daysInDisplayMonth = DateTime(firstDayOfDisplayMonth.year, firstDayOfDisplayMonth.month + 1, 0).day;
+    final firstWeekdayOfDisplayMonth = firstDayOfDisplayMonth.weekday % 7; // Sunday is 0 if DateTime.sunday is 7
+    final lastDayOfDisplayMonth = DateTime(firstDayOfDisplayMonth.year, firstDayOfDisplayMonth.month, daysInDisplayMonth);
+    final lastWeekdayOfDisplayMonth = lastDayOfDisplayMonth.weekday % 7;
+
+    final gridStartDay = firstDayOfDisplayMonth.subtract(Duration(days: firstWeekdayOfDisplayMonth));
+    final gridEndDay = lastDayOfDisplayMonth.add(Duration(days: 6 - lastWeekdayOfDisplayMonth));
+    final totalDaysInGrid = gridEndDay.difference(gridStartDay).inDays + 1;
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Monthly Calendar'),
-        backgroundColor: const Color(0xFF8B6F4E),
+        title: const Text(_AppConstants.monthlyCalendarScreenTitle),
         automaticallyImplyLeading: false,
       ),
       body: Padding(
-        padding: const EdgeInsets.all(16.0),
+        padding: const EdgeInsets.all(_AppConstants.spacingMedium),
         child: Column(
           children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                IconButton(icon: const Icon(Icons.chevron_left), onPressed: () => _changeMonth(-1)),
-                Text(
-                  '${_displayMonth.year} - ${_displayMonth.month.toString().padLeft(2, '0')}',
-                  style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-                ),
-                IconButton(icon: const Icon(Icons.chevron_right), onPressed: () => _changeMonth(1)),
-              ],
-            ),
-            const SizedBox(height: 16),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: weekDays.map((d) => Expanded(child: Center(child: Text(d, style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF8B6F4E), fontSize: 16))))).toList(),
-            ),
-            const SizedBox(height: 8),
+            _buildMonthNavigator(),
+            const SizedBox(height: _AppConstants.spacingMedium),
+            _buildWeekdayLabels(),
+            const SizedBox(height: _AppConstants.spacingSmall),
             Expanded(
-              child: GridView.builder(
-                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: 7, childAspectRatio: 1, crossAxisSpacing: 4, mainAxisSpacing: 4),
-                itemCount: totalDays,
-                itemBuilder: (context, index) {
-                  final date = gridStart.add(Duration(days: index));
-                  final isCurrentMonth = date.month == _displayMonth.month;
-                  final day = date.day;
-                  final entry = box.get(date.toIso8601String());
-                  final isToday = date == today;
-                  final isFuture = date.isAfter(today);
-                  return GestureDetector(
-                    onTap: isFuture
-                        ? null
-                        : () {
-                            showDialog(
-                              context: context,
-                              builder: (context) => _DayDetailDialog(
-                                entryDate: date,
-                                existingEntry: entry,
-                                onSave: (updatedEntry) {
-                                  box.put(updatedEntry.date.toIso8601String(), updatedEntry);
-                                  Navigator.pop(context);
-                                  if (mounted) {
-                                    setState(() {});
-                                  }
-                                },
-                              ),
-                            );
-                          },
-                    child: LayoutBuilder(
-                      builder: (context, constraints) {
-                        double iconSize = constraints.maxWidth * 0.4;
-                        iconSize = iconSize.clamp(16.0, 24.0);
-                        return Container(
-                          decoration: BoxDecoration(
-                            color: !isCurrentMonth
-                                ? const Color(0xFFF3E9D7) // Color for days not in the current month
-                                : isToday
-                                    ? const Color(0xFFEAD7B7) // Color for today
-                                    : const Color(0xFFF8F3E3), // Default color for current month days
-                            borderRadius: BorderRadius.circular(8),
-                            border: Border.all(
-                              color: !isCurrentMonth ? const Color(0xFFBCA18A) : const Color(0xFF8B6F4E),
-                              width: 2,
-                            ),
-                          ),
-                          child: Opacity(
-                            opacity: isFuture ? 0.5 : 1.0,
-                            child: Column(
-                              mainAxisSize: MainAxisSize.max,
-                              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                              children: [
-                                Text(
-                                  '$day',
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    color: isToday
-                                        ? const Color(0xFF6E2C00)
-                                        : !isCurrentMonth
-                                            ? const Color(0xFFBCA18A)
-                                            : null,
-                                  ),
-                                  textAlign: TextAlign.center,
-                                ),
-                                if (entry != null && !isFuture)
-                                  SizedBox(
-                                    width: iconSize,
-                                    height: iconSize,
-                                    child: FittedBox(
-                                      fit: BoxFit.contain,
-                                      child: entry.isAngel ? SvgPicture.asset('assets/angel.svg', width: iconSize, height: iconSize) : SvgPicture.asset('assets/devil.svg', width: iconSize, height: iconSize),
-                                    ),
-                                  ),
-                              ],
-                            ),
-                          ),
-                        );
+              child: _buildCalendarGrid(box, today, gridStartDay, totalDaysInGrid),
+            ),
+            const SizedBox(height: _AppConstants.spacingSmall),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMonthNavigator() {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        IconButton(icon: const Icon(Icons.chevron_left), onPressed: () => _changeMonth(-1)),
+        Text(
+          // Using a more robust way to format month (e.g. via intl package for localization)
+          // For now, padLeft is fine.
+          '${_displayMonth.year} - ${_displayMonth.month.toString().padLeft(2, '0')}',
+          style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+        ),
+        IconButton(icon: const Icon(Icons.chevron_right), onPressed: () => _changeMonth(1)),
+      ],
+    );
+  }
+
+  Widget _buildWeekdayLabels() {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: _AppConstants.weekDayLabels
+          .map((dayLabel) => Expanded(
+                child: Center(
+                  child: Text(
+                    dayLabel,
+                    style: const TextStyle(
+                        fontWeight: FontWeight.bold, color: _AppConstants.primaryColor, fontSize: 16),
+                  ),
+                ),
+              ))
+          .toList(),
+    );
+  }
+
+  Widget _buildCalendarGrid(Box<DiaryEntry> box, DateTime today, DateTime gridStartDay, int totalDaysInGrid) {
+    return GridView.builder(
+      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: 7,
+        childAspectRatio: 1, // Makes cells square
+        crossAxisSpacing: _AppConstants.spacingSmall / 2,
+        mainAxisSpacing: _AppConstants.spacingSmall / 2,
+      ),
+      itemCount: totalDaysInGrid,
+      itemBuilder: (context, index) {
+        final date = gridStartDay.add(Duration(days: index));
+        final isCurrentDisplayMonth = date.month == _displayMonth.month;
+        final entry = box.get(date.toHiveKey);
+        final isToday = date == today;
+        final isFutureDate = date.isAfter(today);
+
+        return GestureDetector(
+          onTap: isFutureDate
+              ? null // Don't allow interaction with future dates
+              : () {
+                  showDialog(
+                    context: context,
+                    builder: (context) => _DayDetailDialog(
+                      entryDate: date,
+                      existingEntry: entry,
+                      onSave: (updatedEntry) {
+                        box.put(updatedEntry.date.toHiveKey, updatedEntry);
+                        Navigator.pop(context); // Close dialog
+                        if (mounted) setState(() {}); // Rebuild calendar to show changes
                       },
                     ),
                   );
                 },
-              ),
-            ),
-            const SizedBox(height: 8),
-          ],
-        ),
-      ),
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              double iconSize = constraints.maxWidth * _AppConstants.calendarGridIconScaleFactor;
+              iconSize = iconSize.clamp(_AppConstants.calendarGridIconMinSize, _AppConstants.calendarGridIconMaxSize);
+              return Container(
+                decoration: BoxDecoration(
+                  color: !isCurrentDisplayMonth
+                      ? _AppConstants.calendarAdjacentMonthDayBg
+                      : isToday
+                          ? _AppConstants.calendarTodayCellBg
+                          : _AppConstants.calendarDefaultCellBg,
+                  borderRadius: BorderRadius.circular(_AppConstants.spacingSmall),
+                  border: Border.all(
+                    color: !isCurrentDisplayMonth
+                        ? _AppConstants.calendarAdjacentMonthBorder
+                        : _AppConstants.primaryColor,
+                    width: 2,
+                  ),
+                ),
+                child: Opacity(
+                  opacity: isFutureDate ? 0.5 : 1.0,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.max,
+                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                    children: [
+                      Text(
+                        '${date.day}',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          color: isToday
+                              ? _AppConstants.calendarTodayText
+                              : !isCurrentDisplayMonth
+                                  ? _AppConstants.calendarAdjacentMonthBorder
+                                  : _AppConstants.calendarDefaultText,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                      if (entry != null && !isFutureDate)
+                        SizedBox(
+                          width: iconSize,
+                          height: iconSize,
+                          child: FittedBox(
+                            fit: BoxFit.contain,
+                            child: SvgPicture.asset(
+                              entry.isAngel ? 'assets/angel.svg' : 'assets/devil.svg',
+                              width: iconSize,
+                              height: iconSize,
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              );
+            },
+          ),
+        );
+      },
     );
   }
 }
@@ -786,11 +919,14 @@ class _DayDetailDialog extends StatefulWidget {
 }
 
 class _DayDetailDialogState extends State<_DayDetailDialog> {
-  bool? _currentIsAngel;
+  bool? _currentIsAngel;      // Current selection in the dialog
   late TextEditingController _controller;
+  
+  // Initial state when dialog opens, to compare for edits
   bool? _initialIsAngel;
   String _initialNote = '';
-  bool _edited = false;
+  
+  bool _isEdited = false; // Tracks if any change has been made
 
   @override
   void initState() {
@@ -798,70 +934,71 @@ class _DayDetailDialogState extends State<_DayDetailDialog> {
     if (widget.existingEntry != null) {
       _initialIsAngel = widget.existingEntry!.isAngel;
       _initialNote = widget.existingEntry!.note;
-      _currentIsAngel = _initialIsAngel;
-      _controller = TextEditingController(text: _initialNote);
     } else {
+      // This is a new entry for a previously unlogged day
       _initialIsAngel = null;
       _initialNote = '';
-      _currentIsAngel = null;
-      _controller = TextEditingController(text: '');
     }
-    _controller.addListener(_handleTextChange);
+    // Initialize current working state from initial state
+    _currentIsAngel = _initialIsAngel;
+    _controller = TextEditingController(text: _initialNote);
+    _controller.addListener(_handleEditState);
   }
 
-  void _handleTextChange() {
-    _updateEditedState();
-  }
+  void _handleEditState() {
+    bool hasSelectionChanged = _currentIsAngel != _initialIsAngel;
+    bool hasNoteChanged = _controller.text != _initialNote;
+    // An edit occurs if selection or note changes. 
+    // For a new entry, just making a selection is an edit.
+    bool newEditedState = (hasSelectionChanged || hasNoteChanged) && (_currentIsAngel != null);
+    
+    if (_initialIsAngel == null && _currentIsAngel != null && !hasNoteChanged) {
+      // Special case: New entry, first icon click, no note change yet
+      newEditedState = true;
+    }
 
-  void _handleIconTap(bool selection) { // Made selection non-nullable for clarity
-    if (_currentIsAngel != selection) {
+    if (_isEdited != newEditedState) {
       setState(() {
-        _currentIsAngel = selection;
-        _updateEditedState();
+        _isEdited = newEditedState;
+      });
+    }
+  }
+
+  void _handleIconTap(bool newSelection) {
+    if (_currentIsAngel != newSelection) {
+      setState(() {
+        _currentIsAngel = newSelection;
+        _handleEditState();
       });
     } else {
-       // Optional: Allow de-selecting by tapping the same icon again
-      // setState(() {
-      //   _currentIsAngel = null;
-      //   _updateEditedState();
-      // });
-    }
-  }
-
-  void _updateEditedState() {
-    bool newEditedState = (_currentIsAngel != _initialIsAngel || _controller.text != _initialNote);
-    // Ensure a selection is made if it was initially null (new entry)
-    if (_initialIsAngel == null && _currentIsAngel == null) {
-      newEditedState = false; // Not considered edited if nothing is selected for a new entry
-    } else if (_initialIsAngel == null && _currentIsAngel != null) {
-      newEditedState = true; // Selecting something for a new entry is an edit
-    }
-
-    if (_edited != newEditedState) {
-      setState(() {
-        _edited = newEditedState;
-      });
+      // If it's a new entry (initial was null), tapping the same icon again de-selects it.
+      if (_initialIsAngel == null) {
+         setState(() {
+            _currentIsAngel = null;
+            _handleEditState();
+        });
+      }
     }
   }
 
   @override
   void dispose() {
-    _controller.removeListener(_handleTextChange);
+    _controller.removeListener(_handleEditState);
     _controller.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    final today = DateTime.now();
-    final dateOfEntry = widget.entryDate;
-    final isToday = dateOfEntry.year == today.year && dateOfEntry.month == today.month && dateOfEntry.day == today.day;
+    final isToday = widget.entryDate == DateTime.now().dateOnly;
 
     return AlertDialog(
       title: Text(
-        '${dateOfEntry.month.toString().padLeft(2, '0')}/${dateOfEntry.day.toString().padLeft(2, '0')}/${dateOfEntry.year}',
+        // Consider using DateFormat for more robust/localized date formatting
+        '${widget.entryDate.month.toString().padLeft(2, '0')}/${widget.entryDate.day.toString().padLeft(2, '0')}/${widget.entryDate.year}',
         style: const TextStyle(fontWeight: FontWeight.bold),
       ),
+      backgroundColor: _AppConstants.scaffoldBackground,
       content: SingleChildScrollView(
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -870,57 +1007,31 @@ class _DayDetailDialogState extends State<_DayDetailDialog> {
             Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                GestureDetector(
-                  onTap: () => _handleIconTap(true),
-                  child: Container(
-                    decoration: BoxDecoration(
-                      color: _currentIsAngel == true ? Colors.yellow[100] : Colors.transparent,
-                      border: Border.all(
-                        color: _currentIsAngel == true ? Colors.yellow[700]! : (_currentIsAngel == null && _initialIsAngel == null ? Colors.grey[400]! : Colors.grey),
-                        width: 2,
-                      ),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    padding: const EdgeInsets.all(4),
-                    child: SvgPicture.asset('assets/angel.svg', width: 32, height: 32),
-                  ),
-                ),
-                const SizedBox(width: 16),
-                GestureDetector(
-                  onTap: () => _handleIconTap(false),
-                  child: Container(
-                    decoration: BoxDecoration(
-                      color: _currentIsAngel == false ? Colors.red[100] : Colors.transparent,
-                      border: Border.all(
-                        color: _currentIsAngel == false ? Colors.redAccent : (_currentIsAngel == null && _initialIsAngel == null ? Colors.grey[400]! : Colors.grey),
-                        width: 2,
-                      ),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    padding: const EdgeInsets.all(4),
-                    child: SvgPicture.asset('assets/devil.svg', width: 32, height: 32),
-                  ),
-                ),
+                _buildDialogIcon(true), // Angel
+                const SizedBox(width: _AppConstants.spacingMedium),
+                _buildDialogIcon(false), // Devil
               ],
             ),
-            const SizedBox(height: 8),
-            if (_currentIsAngel != null)
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 8.0),
-                child: Text(
-                  getAngelDevilText(_currentIsAngel!, isToday),
-                  softWrap: true,
-                  overflow: TextOverflow.visible,
-                  textAlign: TextAlign.center,
-                ),
-              ) else const SizedBox(height: 18), // Placeholder for text height
-            const SizedBox(height: 8),
+            const SizedBox(height: _AppConstants.spacingSmall),
+            // Show text only if a selection is made, provide a placeholder for height otherwise
+            _currentIsAngel != null
+                ? Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: _AppConstants.spacingSmall),
+                    child: Text(
+                      getAngelDevilText(_currentIsAngel!, isToday),
+                      softWrap: true,
+                      overflow: TextOverflow.visible,
+                      textAlign: TextAlign.center,
+                    ),
+                  )
+                : const SizedBox(height: 18), // Approx height of one line of text
+            const SizedBox(height: _AppConstants.spacingSmall),
             TextField(
               controller: _controller,
               maxLines: 4,
               decoration: InputDecoration(
                 border: const OutlineInputBorder(),
-                hintText: isToday ? 'What’s on your mind?' : 'What was on your mind?',
+                hintText: isToday ? 'What’s on your mind?' : 'What was on your mind?', // Could be consts
               ),
             ),
           ],
@@ -929,22 +1040,52 @@ class _DayDetailDialogState extends State<_DayDetailDialog> {
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context),
-          child: const Text('Cancel'),
+          child: const Text('Cancel', style: TextStyle(color: _AppConstants.primaryColor)),
         ),
         TextButton(
-          onPressed: (_currentIsAngel != null && _edited)
+          onPressed: _isEdited && _currentIsAngel != null // Save only if edited and a choice is made
               ? () {
                   final updatedEntry = DiaryEntry(
-                    date: dateOfEntry,
-                    isAngel: _currentIsAngel!,
+                    date: widget.entryDate,
+                    isAngel: _currentIsAngel!, // Safe because _currentIsAngel != null is checked
                     note: _controller.text.trim(),
                   );
                   widget.onSave(updatedEntry);
                 }
               : null,
-          child: const Text('Save'),
+          child: Text('Save', style: TextStyle(color: (_isEdited && _currentIsAngel != null) ? _AppConstants.primaryColor : _AppConstants.defaultIconBorder)),
         ),
       ],
+    );
+  }
+
+  Widget _buildDialogIcon(bool isAngelChoice) {
+    bool isSelected = _currentIsAngel == isAngelChoice;
+    Color borderColor = _AppConstants.defaultIconBorder;
+    if (isSelected) {
+      borderColor = isAngelChoice ? _AppConstants.angelIconSelectedBorder : _AppConstants.devilIconSelectedBorder;
+    } else if (_currentIsAngel == null && _initialIsAngel == null) {
+      // For a new entry, unselected icons have a lighter border
+      borderColor = _AppConstants.unselectedNewEntryIconBorder;
+    }
+
+    return GestureDetector(
+      onTap: () => _handleIconTap(isAngelChoice),
+      child: Container(
+        decoration: BoxDecoration(
+          color: isSelected
+              ? (isAngelChoice ? _AppConstants.angelIconSelectedBg : _AppConstants.devilIconSelectedBg)
+              : Colors.transparent, // No background if not selected
+          border: Border.all(color: borderColor, width: 2),
+          borderRadius: BorderRadius.circular(12), // Could be an _AppConstants value
+        ),
+        padding: const EdgeInsets.all(_AppConstants.spacingSmall),
+        child: SvgPicture.asset(
+          isAngelChoice ? 'assets/angel.svg' : 'assets/devil.svg',
+          width: _AppConstants.dialogIconSize,
+          height: _AppConstants.dialogIconSize,
+        ),
+      ),
     );
   }
 }
