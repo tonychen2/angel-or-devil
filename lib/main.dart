@@ -60,21 +60,17 @@ Future<void> initializeNotifications() async {
     onDidReceiveNotificationResponse: (NotificationResponse response) async {
       logger.i("Notification tapped! Payload: ${response.payload}");
 
-      // Wait a brief moment to allow the navigator to initialize, especially on cold start
       await Future.delayed(const Duration(milliseconds: 500));
 
       if (navigatorKey.currentState != null) {
-        // Use pushReplacement to make DailyPromptScreen the current top route.
-        navigatorKey.currentState!.pushReplacement(
+        navigatorKey.currentState!.pushAndRemoveUntil(
           MaterialPageRoute(
             builder: (context) => DailyPromptScreen(
               onComplete: () {
-                // This callback is executed when DailyPromptScreen signals completion.
-                // Navigate to MainTabView, making it the new root of the navigation stack.
                 if (navigatorKey.currentState != null) {
                   navigatorKey.currentState!.pushAndRemoveUntil(
                     MaterialPageRoute(builder: (context) => const MainTabView()),
-                    (Route<dynamic> route) => false, // Removes all previous routes
+                    (Route<dynamic> route) => false,
                   );
                   logger.i("DailyPromptScreen (from notification) completed. Navigated to MainTabView.");
                 } else {
@@ -83,11 +79,11 @@ Future<void> initializeNotifications() async {
               },
             ),
           ),
+          (Route<dynamic> route) => false,
         );
-        logger.i("Successfully pushed DailyPromptScreen (from notification) with onComplete handler.");
+        logger.i("Successfully pushed DailyPromptScreen (from notification) and removed previous routes.");
       } else {
         logger.e("Navigator state was null when trying to push from notification. Navigation failed.");
-        // Consider a fallback here, e.g., setting a global flag that LaunchDecider can check.
       }
     },
   );
@@ -107,29 +103,26 @@ Future<void> scheduleDailyAngelDevilNotification() async {
   final NotificationDetails details = NotificationDetails(android: androidDetails, iOS: iosDetails);
 
   final now = DateTime.now();
-  final time = DateTime(now.year, now.month, now.day, 19, 0); // 7:00 PM
-  // Always schedule for next 7:00 PM
+  final time = DateTime(now.year, now.month, now.day, 19, 0);
   var scheduledTime = time.isAfter(now) ? time : time.add(const Duration(days: 1));
   final tzScheduledTime = tz.TZDateTime.from(scheduledTime, tz.local);
 
-  // Robustness: Cancel any existing notification with ID 0 before scheduling a new one.
   await flutterLocalNotificationsPlugin.cancel(0);
   logger.i('Cancelled any existing daily notification with ID 0.');
 
   await flutterLocalNotificationsPlugin.zonedSchedule(
-    0, // Notification ID
+    0,
     'Angel Baby',
     'Was your baby a little angel or a little devil today?',
     tzScheduledTime,
     details,
     androidScheduleMode: AndroidScheduleMode.inexact,
-    matchDateTimeComponents: DateTimeComponents.time, // This makes it repeat daily
+    matchDateTimeComponents: DateTimeComponents.time,
     payload: '',
   );
   logger.i('Daily notification scheduled for $tzScheduledTime with ID 0.');
 }
 
-// Shared helper for angel/devil text
 String getAngelDevilText(bool isAngel, bool isToday) {
   return isToday
       ? isAngel
@@ -147,7 +140,7 @@ Future<void> main() async {
   try {
     localTimeZone = await FlutterTimezone.getLocalTimezone();
   } catch (e) {
-    // fallback to UTC
+    logger.w('Failed to get local timezone: $e. Defaulting to UTC.');
   }
   tz.setLocalLocation(tz.getLocation(localTimeZone));
   await Hive.initFlutter();
@@ -253,7 +246,6 @@ class _LaunchDeciderState extends State<LaunchDecider> with WidgetsBindingObserv
     final todayKey = DateTime(now.year, now.month, now.day).toIso8601String();
     final entry = box.get(todayKey);
     if (now.isAfter(fivePM) && entry == null) {
-      // Only navigate if not already showing prompt
       if (_showPrompt != true) {
         setState(() {
           _showPrompt = true;
@@ -344,7 +336,6 @@ class InsightPlaceholderScreen extends StatelessWidget {
   }
 }
 
-// MVP Screen 1: Daily Prompt
 class DailyPromptScreen extends StatelessWidget {
   final VoidCallback? onComplete;
   const DailyPromptScreen({super.key, this.onComplete});
@@ -355,7 +346,7 @@ class DailyPromptScreen extends StatelessWidget {
     final today = DateTime.now();
     final todayKey = DateTime(today.year, today.month, today.day).toIso8601String();
     final entry = box.get(todayKey);
-    bool? selected = entry?.isAngel; // null if no entry
+    bool? selected = entry?.isAngel;
 
     return Scaffold(
       appBar: AppBar(
@@ -455,7 +446,6 @@ class DailyPromptScreen extends StatelessWidget {
   }
 }
 
-// MVP Screen 2: Optional Diary Entry
 class DiaryEntryScreen extends StatefulWidget {
   final bool isAngel;
   final String note;
@@ -467,7 +457,6 @@ class DiaryEntryScreen extends StatefulWidget {
 
 class _DiaryEntryScreenState extends State<DiaryEntryScreen> {
   late TextEditingController _controller;
-
   bool _isAngelSelected = true;
 
   @override
@@ -492,7 +481,7 @@ class _DiaryEntryScreenState extends State<DiaryEntryScreen> {
         child: Padding(
           padding: const EdgeInsets.all(16.0),
           child: ConstrainedBox(
-            constraints: BoxConstraints(maxWidth: 400),
+            constraints: const BoxConstraints(maxWidth: 400),
             child: SingleChildScrollView(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -510,23 +499,15 @@ class _DiaryEntryScreenState extends State<DiaryEntryScreen> {
                         },
                         child: Container(
                           decoration: BoxDecoration(
-                            color: _isAngelSelected
-                                ? Colors.yellow[100]
-                                : Colors.transparent,
+                            color: _isAngelSelected ? Colors.yellow[100] : Colors.transparent,
                             border: Border.all(
-                              color: _isAngelSelected
-                                  ? Colors.yellow[700]!
-                                  : Colors.grey,
+                              color: _isAngelSelected ? Colors.yellow[700]! : Colors.grey,
                               width: 2,
                             ),
                             borderRadius: BorderRadius.circular(12),
                           ),
                           padding: const EdgeInsets.all(4),
-                          child: SvgPicture.asset(
-                            'assets/angel.svg',
-                            width: 48,
-                            height: 48,
-                          ),
+                          child: SvgPicture.asset('assets/angel.svg', width: 48, height: 48),
                         ),
                       ),
                       GestureDetector(
@@ -537,23 +518,15 @@ class _DiaryEntryScreenState extends State<DiaryEntryScreen> {
                         },
                         child: Container(
                           decoration: BoxDecoration(
-                            color: !_isAngelSelected
-                                ? Colors.red[100]
-                                : Colors.transparent,
+                            color: !_isAngelSelected ? Colors.red[100] : Colors.transparent,
                             border: Border.all(
-                              color: !_isAngelSelected
-                                  ? Colors.redAccent
-                                  : Colors.grey,
+                              color: !_isAngelSelected ? Colors.redAccent : Colors.grey,
                               width: 2,
                             ),
                             borderRadius: BorderRadius.circular(12),
                           ),
                           padding: const EdgeInsets.all(4),
-                          child: SvgPicture.asset(
-                            'assets/devil.svg',
-                            width: 48,
-                            height: 48,
-                          ),
+                          child: SvgPicture.asset('assets/devil.svg', width: 48, height: 48),
                         ),
                       ),
                       SizedBox(
@@ -581,7 +554,6 @@ class _DiaryEntryScreenState extends State<DiaryEntryScreen> {
                   const SizedBox(height: 24),
                   ElevatedButton(
                     onPressed: () async {
-                      // Use _isAngelSelected for saving
                       final box = Hive.box<DiaryEntry>('entries');
                       final today = DateTime.now();
                       final entry = DiaryEntry(
@@ -591,14 +563,13 @@ class _DiaryEntryScreenState extends State<DiaryEntryScreen> {
                       );
                       await box.put(entry.date.toIso8601String(), entry);
                       logger.i('Entry saved successfully');
-                      logger.i('Attempting navigation to CalendarViewScreen');
                       if (mounted) {
-                        Navigator.pushReplacement(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => const CalendarViewScreen(),
-                          ),
-                        );
+                        // Navigate back to the main flow, which should be MainTabView -> CalendarViewScreen
+                        // Clearing the stack until MainTabView ensures a clean state.
+                         Navigator.of(context).pushAndRemoveUntil(
+                            MaterialPageRoute(builder: (context) => const MainTabView()),
+                            (Route<dynamic> route) => false,
+                         );
                       }
                     },
                     child: const Text('Save'),
@@ -613,17 +584,18 @@ class _DiaryEntryScreenState extends State<DiaryEntryScreen> {
   }
 }
 
-// MVP Screen 3: Monthly Calendar View
 class CalendarViewScreen extends StatelessWidget {
   const CalendarViewScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
-    return _CalendarViewBody();
+    return const _CalendarViewBody();
   }
 }
 
 class _CalendarViewBody extends StatefulWidget {
+  const _CalendarViewBody({super.key});
+
   @override
   State<_CalendarViewBody> createState() => _CalendarViewBodyState();
 }
@@ -658,10 +630,7 @@ class _CalendarViewBodyState extends State<_CalendarViewBody> with WidgetsBindin
 
   void _changeMonth(int offset) {
     setState(() {
-      _displayMonth = DateTime(
-        _displayMonth.year,
-        _displayMonth.month + offset,
-      );
+      _displayMonth = DateTime(_displayMonth.year, _displayMonth.month + offset);
     });
   }
 
@@ -670,24 +639,11 @@ class _CalendarViewBodyState extends State<_CalendarViewBody> with WidgetsBindin
     final box = Hive.box<DiaryEntry>('entries');
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
-    final firstDayOfMonth = DateTime(
-      _displayMonth.year,
-      _displayMonth.month,
-      1,
-    );
-    final daysInMonth = DateTime(
-      _displayMonth.year,
-      _displayMonth.month + 1,
-      0,
-    ).day;
+    final firstDayOfMonth = DateTime(_displayMonth.year, _displayMonth.month, 1);
+    final daysInMonth = DateTime(_displayMonth.year, _displayMonth.month + 1, 0).day;
 
-    // Calculate calendar grid range for full weeks
-    final firstWeekday = firstDayOfMonth.weekday % 7; // Sunday=0
-    final lastDayOfMonth = DateTime(
-      _displayMonth.year,
-      _displayMonth.month,
-      daysInMonth,
-    );
+    final firstWeekday = firstDayOfMonth.weekday % 7;
+    final lastDayOfMonth = DateTime(_displayMonth.year, _displayMonth.month, daysInMonth);
     final lastWeekday = lastDayOfMonth.weekday % 7;
     final gridStart = firstDayOfMonth.subtract(Duration(days: firstWeekday));
     final gridEnd = lastDayOfMonth.add(Duration(days: 6 - lastWeekday));
@@ -707,52 +663,23 @@ class _CalendarViewBodyState extends State<_CalendarViewBody> with WidgetsBindin
             Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                IconButton(
-                  icon: const Icon(Icons.chevron_left),
-                  onPressed: () => _changeMonth(-1),
-                ),
+                IconButton(icon: const Icon(Icons.chevron_left), onPressed: () => _changeMonth(-1)),
                 Text(
                   '${_displayMonth.year} - ${_displayMonth.month.toString().padLeft(2, '0')}',
-                  style: const TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
-                  ),
+                  style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
                 ),
-                IconButton(
-                  icon: const Icon(Icons.chevron_right),
-                  onPressed: () => _changeMonth(1),
-                ),
+                IconButton(icon: const Icon(Icons.chevron_right), onPressed: () => _changeMonth(1)),
               ],
             ),
             const SizedBox(height: 16),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: weekDays
-                  .map(
-                    (d) => Expanded(
-                      child: Center(
-                        child: Text(
-                          d,
-                          style: const TextStyle(
-                            fontWeight: FontWeight.bold,
-                            color: Color(0xFF8B6F4E),
-                            fontSize: 16,
-                          ),
-                        ),
-                      ),
-                    ),
-                  )
-                  .toList(),
+              children: weekDays.map((d) => Expanded(child: Center(child: Text(d, style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF8B6F4E), fontSize: 16))))).toList(),
             ),
             const SizedBox(height: 8),
             Expanded(
               child: GridView.builder(
-                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: 7,
-                  childAspectRatio: 1,
-                  crossAxisSpacing: 4,
-                  mainAxisSpacing: 4,
-                ),
+                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: 7, childAspectRatio: 1, crossAxisSpacing: 4, mainAxisSpacing: 4),
                 itemCount: totalDays,
                 itemBuilder: (context, index) {
                   final date = gridStart.add(Duration(days: index));
@@ -762,51 +689,38 @@ class _CalendarViewBodyState extends State<_CalendarViewBody> with WidgetsBindin
                   final isToday = date == today;
                   final isFuture = date.isAfter(today);
                   return GestureDetector(
-                    onTap: isFuture || !isCurrentMonth
+                    onTap: isFuture
                         ? null
                         : () {
                             showDialog(
                               context: context,
                               builder: (context) => _DayDetailDialog(
-                                day: day,
-                                entry:
-                                    entry ??
-                                    DiaryEntry(
-                                      date: date,
-                                      isAngel: true,
-                                      note: '',
-                                    ),
+                                entryDate: date,
+                                existingEntry: entry,
                                 onSave: (updatedEntry) {
-                                  final box = Hive.box<DiaryEntry>('entries');
-                                  box.put(
-                                    updatedEntry.date.toIso8601String(),
-                                    updatedEntry,
-                                  );
+                                  box.put(updatedEntry.date.toIso8601String(), updatedEntry);
                                   Navigator.pop(context);
-                                  setState(() {});
+                                  if (mounted) {
+                                    setState(() {});
+                                  }
                                 },
                               ),
                             );
                           },
                     child: LayoutBuilder(
                       builder: (context, constraints) {
-                        // Use a smaller icon size and ensure scaling
                         double iconSize = constraints.maxWidth * 0.4;
-                        iconSize = iconSize.clamp(16.0, 24.0); // keep icons small
+                        iconSize = iconSize.clamp(16.0, 24.0);
                         return Container(
                           decoration: BoxDecoration(
-                            color: isFuture || !isCurrentMonth
-                                ? const Color(0xFFF3E9D7)
+                            color: !isCurrentMonth
+                                ? const Color(0xFFF3E9D7) // Color for days not in the current month
                                 : isToday
-                                ? const Color(0xFFEAD7B7)
-                                : (entry != null
-                                      ? const Color(0xFFF8F3E3)
-                                      : const Color(0xFFF8F3E3)),
+                                    ? const Color(0xFFEAD7B7) // Color for today
+                                    : const Color(0xFFF8F3E3), // Default color for current month days
                             borderRadius: BorderRadius.circular(8),
                             border: Border.all(
-                              color: isFuture || !isCurrentMonth
-                                  ? const Color(0xFFBCA18A)
-                                  : const Color(0xFF8B6F4E),
+                              color: !isCurrentMonth ? const Color(0xFFBCA18A) : const Color(0xFF8B6F4E),
                               width: 2,
                             ),
                           ),
@@ -822,9 +736,9 @@ class _CalendarViewBodyState extends State<_CalendarViewBody> with WidgetsBindin
                                     fontWeight: FontWeight.bold,
                                     color: isToday
                                         ? const Color(0xFF6E2C00)
-                                        : isFuture || !isCurrentMonth
-                                        ? const Color(0xFFBCA18A)
-                                        : null,
+                                        : !isCurrentMonth
+                                            ? const Color(0xFFBCA18A)
+                                            : null,
                                   ),
                                   textAlign: TextAlign.center,
                                 ),
@@ -834,17 +748,7 @@ class _CalendarViewBodyState extends State<_CalendarViewBody> with WidgetsBindin
                                     height: iconSize,
                                     child: FittedBox(
                                       fit: BoxFit.contain,
-                                      child: entry.isAngel
-                                          ? SvgPicture.asset(
-                                              'assets/angel.svg',
-                                              width: iconSize,
-                                              height: iconSize,
-                                            )
-                                          : SvgPicture.asset(
-                                              'assets/devil.svg',
-                                              width: iconSize,
-                                              height: iconSize,
-                                            ),
+                                      child: entry.isAngel ? SvgPicture.asset('assets/angel.svg', width: iconSize, height: iconSize) : SvgPicture.asset('assets/devil.svg', width: iconSize, height: iconSize),
                                     ),
                                   ),
                               ],
@@ -866,12 +770,14 @@ class _CalendarViewBodyState extends State<_CalendarViewBody> with WidgetsBindin
 }
 
 class _DayDetailDialog extends StatefulWidget {
-  final int day;
-  final DiaryEntry entry;
+  final DateTime entryDate;
+  final DiaryEntry? existingEntry;
   final void Function(DiaryEntry) onSave;
+
   const _DayDetailDialog({
-    required this.day,
-    required this.entry,
+    super.key,
+    required this.entryDate,
+    this.existingEntry,
     required this.onSave,
   });
 
@@ -880,35 +786,80 @@ class _DayDetailDialog extends StatefulWidget {
 }
 
 class _DayDetailDialogState extends State<_DayDetailDialog> {
-  late bool _isAngel;
+  bool? _currentIsAngel;
   late TextEditingController _controller;
+  bool? _initialIsAngel;
+  String _initialNote = '';
   bool _edited = false;
 
   @override
   void initState() {
     super.initState();
-    _isAngel = widget.entry.isAngel;
-    _controller = TextEditingController(text: widget.entry.note);
-    _controller.addListener(() {
+    if (widget.existingEntry != null) {
+      _initialIsAngel = widget.existingEntry!.isAngel;
+      _initialNote = widget.existingEntry!.note;
+      _currentIsAngel = _initialIsAngel;
+      _controller = TextEditingController(text: _initialNote);
+    } else {
+      _initialIsAngel = null;
+      _initialNote = '';
+      _currentIsAngel = null;
+      _controller = TextEditingController(text: '');
+    }
+    _controller.addListener(_handleTextChange);
+  }
+
+  void _handleTextChange() {
+    _updateEditedState();
+  }
+
+  void _handleIconTap(bool selection) { // Made selection non-nullable for clarity
+    if (_currentIsAngel != selection) {
       setState(() {
-        _edited =
-            _isAngel != widget.entry.isAngel ||
-            _controller.text != widget.entry.note;
+        _currentIsAngel = selection;
+        _updateEditedState();
       });
-    });
+    } else {
+       // Optional: Allow de-selecting by tapping the same icon again
+      // setState(() {
+      //   _currentIsAngel = null;
+      //   _updateEditedState();
+      // });
+    }
+  }
+
+  void _updateEditedState() {
+    bool newEditedState = (_currentIsAngel != _initialIsAngel || _controller.text != _initialNote);
+    // Ensure a selection is made if it was initially null (new entry)
+    if (_initialIsAngel == null && _currentIsAngel == null) {
+      newEditedState = false; // Not considered edited if nothing is selected for a new entry
+    } else if (_initialIsAngel == null && _currentIsAngel != null) {
+      newEditedState = true; // Selecting something for a new entry is an edit
+    }
+
+    if (_edited != newEditedState) {
+      setState(() {
+        _edited = newEditedState;
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.removeListener(_handleTextChange);
+    _controller.dispose();
+    super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     final today = DateTime.now();
-    final isToday =
-        widget.entry.date.year == today.year &&
-        widget.entry.date.month == today.month &&
-        widget.entry.date.day == today.day;
+    final dateOfEntry = widget.entryDate;
+    final isToday = dateOfEntry.year == today.year && dateOfEntry.month == today.month && dateOfEntry.day == today.day;
+
     return AlertDialog(
       title: Text(
-        // Show full date instead of just day number
-        '${widget.entry.date.month.toString().padLeft(2, '0')}/${widget.entry.date.day.toString().padLeft(2, '0')}/${widget.entry.date.year}',
+        '${dateOfEntry.month.toString().padLeft(2, '0')}/${dateOfEntry.day.toString().padLeft(2, '0')}/${dateOfEntry.year}',
         style: const TextStyle(fontWeight: FontWeight.bold),
       ),
       content: SingleChildScrollView(
@@ -920,77 +871,56 @@ class _DayDetailDialogState extends State<_DayDetailDialog> {
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 GestureDetector(
-                  onTap: () {
-                    setState(() {
-                      _isAngel = true;
-                      _edited = true;
-                    });
-                  },
+                  onTap: () => _handleIconTap(true),
                   child: Container(
                     decoration: BoxDecoration(
-                      color: _isAngel
-                          ? Colors.yellow[100]
-                          : Colors.transparent,
+                      color: _currentIsAngel == true ? Colors.yellow[100] : Colors.transparent,
                       border: Border.all(
-                        color: _isAngel ? Colors.yellow[700]! : Colors.grey,
+                        color: _currentIsAngel == true ? Colors.yellow[700]! : (_currentIsAngel == null && _initialIsAngel == null ? Colors.grey[400]! : Colors.grey),
                         width: 2,
                       ),
                       borderRadius: BorderRadius.circular(12),
                     ),
                     padding: const EdgeInsets.all(4),
-                    child: SvgPicture.asset(
-                      'assets/angel.svg',
-                      width: 32,
-                      height: 32,
-                    ),
+                    child: SvgPicture.asset('assets/angel.svg', width: 32, height: 32),
                   ),
                 ),
                 const SizedBox(width: 16),
                 GestureDetector(
-                  onTap: () {
-                    setState(() {
-                      _isAngel = false;
-                      _edited = true;
-                    });
-                  },
+                  onTap: () => _handleIconTap(false),
                   child: Container(
                     decoration: BoxDecoration(
-                      color: !_isAngel ? Colors.red[100] : Colors.transparent,
+                      color: _currentIsAngel == false ? Colors.red[100] : Colors.transparent,
                       border: Border.all(
-                        color: !_isAngel ? Colors.redAccent : Colors.grey,
+                        color: _currentIsAngel == false ? Colors.redAccent : (_currentIsAngel == null && _initialIsAngel == null ? Colors.grey[400]! : Colors.grey),
                         width: 2,
                       ),
                       borderRadius: BorderRadius.circular(12),
                     ),
                     padding: const EdgeInsets.all(4),
-                    child: SvgPicture.asset(
-                      'assets/devil.svg',
-                      width: 32,
-                      height: 32,
-                    ),
+                    child: SvgPicture.asset('assets/devil.svg', width: 32, height: 32),
                   ),
                 ),
               ],
             ),
             const SizedBox(height: 8),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 8.0),
-              child: Text(
-                getAngelDevilText(_isAngel, isToday),
-                softWrap: true,
-                overflow: TextOverflow.visible,
-                textAlign: TextAlign.center,
-              ),
-            ),
+            if (_currentIsAngel != null)
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 8.0),
+                child: Text(
+                  getAngelDevilText(_currentIsAngel!, isToday),
+                  softWrap: true,
+                  overflow: TextOverflow.visible,
+                  textAlign: TextAlign.center,
+                ),
+              ) else const SizedBox(height: 18), // Placeholder for text height
             const SizedBox(height: 8),
             TextField(
               controller: _controller,
               maxLines: 4,
               decoration: InputDecoration(
                 border: const OutlineInputBorder(),
-                hintText: isToday
-                    ? 'What’s on your mind'
-                    : 'What was on your mind',
+                hintText: isToday ? 'What’s on your mind?' : 'What was on your mind?',
               ),
             ),
           ],
@@ -1002,11 +932,11 @@ class _DayDetailDialogState extends State<_DayDetailDialog> {
           child: const Text('Cancel'),
         ),
         TextButton(
-          onPressed: _edited
+          onPressed: (_currentIsAngel != null && _edited)
               ? () {
                   final updatedEntry = DiaryEntry(
-                    date: widget.entry.date,
-                    isAngel: _isAngel,
+                    date: dateOfEntry,
+                    isAngel: _currentIsAngel!,
                     note: _controller.text.trim(),
                   );
                   widget.onSave(updatedEntry);
