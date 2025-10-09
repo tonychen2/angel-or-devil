@@ -58,11 +58,37 @@ Future<void> initializeNotifications() async {
   await flutterLocalNotificationsPlugin.initialize(
     initSettings,
     onDidReceiveNotificationResponse: (NotificationResponse response) async {
-      navigatorKey.currentState?.push(
-        MaterialPageRoute(
-          builder: (context) => DailyPromptScreen(),
-        ),
-      );
+      logger.i("Notification tapped! Payload: ${response.payload}");
+
+      // Wait a brief moment to allow the navigator to initialize, especially on cold start
+      await Future.delayed(const Duration(milliseconds: 500));
+
+      if (navigatorKey.currentState != null) {
+        // Use pushReplacement to make DailyPromptScreen the current top route.
+        navigatorKey.currentState!.pushReplacement(
+          MaterialPageRoute(
+            builder: (context) => DailyPromptScreen(
+              onComplete: () {
+                // This callback is executed when DailyPromptScreen signals completion.
+                // Navigate to MainTabView, making it the new root of the navigation stack.
+                if (navigatorKey.currentState != null) {
+                  navigatorKey.currentState!.pushAndRemoveUntil(
+                    MaterialPageRoute(builder: (context) => const MainTabView()),
+                    (Route<dynamic> route) => false, // Removes all previous routes
+                  );
+                  logger.i("DailyPromptScreen (from notification) completed. Navigated to MainTabView.");
+                } else {
+                  logger.e("Navigator state was null when trying to navigate from DailyPromptScreen's onComplete (notification context).");
+                }
+              },
+            ),
+          ),
+        );
+        logger.i("Successfully pushed DailyPromptScreen (from notification) with onComplete handler.");
+      } else {
+        logger.e("Navigator state was null when trying to push from notification. Navigation failed.");
+        // Consider a fallback here, e.g., setting a global flag that LaunchDecider can check.
+      }
     },
   );
 }
@@ -85,8 +111,13 @@ Future<void> scheduleDailyAngelDevilNotification() async {
   // Always schedule for next 7:00 PM
   var scheduledTime = time.isAfter(now) ? time : time.add(const Duration(days: 1));
   final tzScheduledTime = tz.TZDateTime.from(scheduledTime, tz.local);
+
+  // Robustness: Cancel any existing notification with ID 0 before scheduling a new one.
+  await flutterLocalNotificationsPlugin.cancel(0);
+  logger.i('Cancelled any existing daily notification with ID 0.');
+
   await flutterLocalNotificationsPlugin.zonedSchedule(
-    0,
+    0, // Notification ID
     'Angel Baby',
     'Was your baby a little angel or a little devil today?',
     tzScheduledTime,
@@ -95,7 +126,7 @@ Future<void> scheduleDailyAngelDevilNotification() async {
     matchDateTimeComponents: DateTimeComponents.time, // This makes it repeat daily
     payload: '',
   );
-  logger.i('Daily notification scheduled for $tzScheduledTime');
+  logger.i('Daily notification scheduled for $tzScheduledTime with ID 0.');
 }
 
 // Shared helper for angel/devil text
@@ -182,9 +213,12 @@ class _LaunchDeciderState extends State<LaunchDecider> with WidgetsBindingObserv
   }
 
   @override
-  void didChangeAppLifecycleState(AppLifecycleState state) {
+  Future<void> didChangeAppLifecycleState(AppLifecycleState state) async {
+    super.didChangeAppLifecycleState(state);
     if (state == AppLifecycleState.resumed) {
-      _checkPromptOnResume();
+      logger.i('App resumed. Re-evaluating prompt and re-scheduling daily notification.');
+      await _checkPromptOnResume();
+      await scheduleDailyAngelDevilNotification();
     }
   }
 
@@ -594,7 +628,7 @@ class _CalendarViewBody extends StatefulWidget {
   State<_CalendarViewBody> createState() => _CalendarViewBodyState();
 }
 
-class _CalendarViewBodyState extends State<_CalendarViewBody> {
+class _CalendarViewBodyState extends State<_CalendarViewBody> with WidgetsBindingObserver {
   late DateTime _displayMonth;
 
   @override
@@ -602,6 +636,24 @@ class _CalendarViewBodyState extends State<_CalendarViewBody> {
     super.initState();
     final now = DateTime.now();
     _displayMonth = DateTime(now.year, now.month);
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    super.didChangeAppLifecycleState(state);
+    if (state == AppLifecycleState.resumed) {
+      final now = DateTime.now();
+      setState(() {
+        _displayMonth = DateTime(now.year, now.month);
+      });
+    }
   }
 
   void _changeMonth(int offset) {
