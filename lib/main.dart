@@ -61,7 +61,7 @@ class _AppConstants {
 
   // Text
   static const String appTitle = 'Angel or Devil';
-  static const String insightScreenTitle = 'Insight';
+  static const String insightScreenTitle = 'Insights';
   static const String dailyPromptScreenTitle = 'Angel Baby';
   static const String diaryEntryScreenTitle = 'Diary Entry';
   static const String monthlyCalendarScreenTitle = 'Monthly Calendar';
@@ -402,7 +402,7 @@ class _MainTabViewState extends State<MainTabView> {
           ),
           BottomNavigationBarItem(
             icon: Icon(Icons.bar_chart),
-            label: 'Insight',
+            label: 'Insights',
           ),
         ],
         selectedItemColor: _AppConstants.primaryColor,
