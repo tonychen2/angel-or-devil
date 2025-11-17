@@ -56,7 +56,6 @@ class _AppConstants {
   static const int promptEligibilityHour = 17; // 5 PM
   static const int dailyNotificationHour = 19; // 7 PM
   static const int dailyNotificationId = 0;
-  static const int testNotificationId = 1;
   static const int navigatorPushDelayMillis = 500;
 
   // Text
@@ -82,7 +81,11 @@ final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin =
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
 Future<void> initializeNotifications() async {
-  await Permission.notification.request();
+  try {
+    await Permission.notification.request();
+  } catch (e) {
+    logger.w('Failed to request notification permission: $e');
+  }
 
   const AndroidInitializationSettings androidInit =
       AndroidInitializationSettings('@mipmap/ic_launcher'); // Keep as is, specific to Android
@@ -190,19 +193,42 @@ String getAngelDevilText(bool isAngel, bool isToday) {
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  tzdata.initializeTimeZones();
-  String localTimeZone = 'UTC'; // Default timezone
+  
   try {
-    localTimeZone = await FlutterTimezone.getLocalTimezone();
+    tzdata.initializeTimeZones();
+    String localTimeZone = 'UTC'; // Default timezone
+    try {
+      localTimeZone = await FlutterTimezone.getLocalTimezone();
+    } catch (e) {
+      logger.w('Failed to get local timezone: $e. Defaulting to UTC.');
+    }
+    try {
+      tz.setLocalLocation(tz.getLocation(localTimeZone));
+    } catch (e) {
+      logger.w('Failed to set timezone location: $e. Using UTC.');
+      tz.setLocalLocation(tz.getLocation('UTC'));
+    }
   } catch (e) {
-    logger.w('Failed to get local timezone: $e. Defaulting to UTC.');
+    logger.e('Error initializing timezones: $e');
   }
-  tz.setLocalLocation(tz.getLocation(localTimeZone));
-  await Hive.initFlutter();
-  Hive.registerAdapter(DiaryEntryAdapter());
-  await Hive.openBox<DiaryEntry>(kHiveBoxName);
-  await initializeNotifications();
-  await scheduleDailyAngelDevilNotification();
+  
+  try {
+    await Hive.initFlutter();
+    Hive.registerAdapter(DiaryEntryAdapter());
+    await Hive.openBox<DiaryEntry>(kHiveBoxName);
+  } catch (e) {
+    logger.e('Error initializing Hive: $e');
+    rethrow; // Hive is critical, so rethrow
+  }
+  
+  try {
+    await initializeNotifications();
+    await scheduleDailyAngelDevilNotification();
+  } catch (e) {
+    logger.e('Error initializing notifications: $e');
+    // Don't rethrow - notifications are not critical for app startup
+  }
+  
   runApp(const AngelDevilApp());
 }
 
@@ -681,7 +707,8 @@ class _CalendarViewBodyState extends State<_CalendarViewBody> with WidgetsBindin
   @override
   void initState() {
     super.initState();
-    _displayMonth = DateTime.now().dateOnly.copyWith(day: 1);
+    final now = DateTime.now();
+    _displayMonth = DateTime(now.year, now.month, 1);
     WidgetsBinding.instance.addObserver(this);
   }
 
@@ -698,7 +725,8 @@ class _CalendarViewBodyState extends State<_CalendarViewBody> with WidgetsBindin
       if (mounted) {
         setState(() {
           // Refresh to current month if app is resumed, useful if it was backgrounded for a long time
-          _displayMonth = DateTime.now().dateOnly.copyWith(day: 1);
+          final now = DateTime.now();
+          _displayMonth = DateTime(now.year, now.month, 1);
         });
       }
     }
@@ -717,14 +745,30 @@ class _CalendarViewBodyState extends State<_CalendarViewBody> with WidgetsBindin
     final box = Hive.box<DiaryEntry>(kHiveBoxName);
     final today = DateTime.now().dateOnly;
 
-    final firstDayOfDisplayMonth = _displayMonth;
-    final daysInDisplayMonth = DateTime(firstDayOfDisplayMonth.year, firstDayOfDisplayMonth.month + 1, 0).day;
-    final firstWeekdayOfDisplayMonth = firstDayOfDisplayMonth.weekday % 7; // Sunday is 0 if DateTime.sunday is 7
-    final lastDayOfDisplayMonth = DateTime(firstDayOfDisplayMonth.year, firstDayOfDisplayMonth.month, daysInDisplayMonth);
+    // Use UTC to avoid DST issues when calculating dates
+    final firstDayOfDisplayMonth = DateTime.utc(_displayMonth.year, _displayMonth.month, 1);
+    final daysInDisplayMonth = DateTime.utc(firstDayOfDisplayMonth.year, firstDayOfDisplayMonth.month + 1, 0).day;
+    // DateTime.weekday: Monday=1, Tuesday=2, ..., Sunday=7
+    // Convert to: Sunday=0, Monday=1, ..., Saturday=6
+    final firstWeekdayOfDisplayMonth = firstDayOfDisplayMonth.weekday % 7;
+    final lastDayOfDisplayMonth = DateTime.utc(firstDayOfDisplayMonth.year, firstDayOfDisplayMonth.month, daysInDisplayMonth);
     final lastWeekdayOfDisplayMonth = lastDayOfDisplayMonth.weekday % 7;
 
-    final gridStartDay = firstDayOfDisplayMonth.subtract(Duration(days: firstWeekdayOfDisplayMonth));
-    final gridEndDay = lastDayOfDisplayMonth.add(Duration(days: 6 - lastWeekdayOfDisplayMonth));
+    // Calculate grid start/end using date arithmetic to avoid DST issues
+    // Subtract days by going back in the month
+    final daysToSubtract = firstWeekdayOfDisplayMonth;
+    final gridStartDay = DateTime.utc(
+      firstDayOfDisplayMonth.year,
+      firstDayOfDisplayMonth.month,
+      1 - daysToSubtract,
+    );
+    // Add days by going forward in the month
+    final daysToAdd = 6 - lastWeekdayOfDisplayMonth;
+    final gridEndDay = DateTime.utc(
+      lastDayOfDisplayMonth.year,
+      lastDayOfDisplayMonth.month,
+      lastDayOfDisplayMonth.day + daysToAdd,
+    );
     final totalDaysInGrid = gridEndDay.difference(gridStartDay).inDays + 1;
 
     return Scaffold(
@@ -793,7 +837,12 @@ class _CalendarViewBodyState extends State<_CalendarViewBody> with WidgetsBindin
       ),
       itemCount: totalDaysInGrid,
       itemBuilder: (context, index) {
-        final date = gridStartDay.add(Duration(days: index));
+        // Calculate date using year/month/day arithmetic to avoid DST issues
+        final date = DateTime.utc(
+          gridStartDay.year,
+          gridStartDay.month,
+          gridStartDay.day + index,
+        ).dateOnly;
         final isCurrentDisplayMonth = date.month == _displayMonth.month;
         final entry = box.get(date.toHiveKey);
         final isToday = date == today;
