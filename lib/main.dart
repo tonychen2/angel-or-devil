@@ -81,29 +81,6 @@ final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin =
     FlutterLocalNotificationsPlugin();
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
-Future<void> showImmediateTestNotification() async {
-  const AndroidNotificationDetails androidDetails = AndroidNotificationDetails(
-    kNotificationChannelId,
-    kNotificationChannelName,
-    channelDescription: 'Immediate test notification',
-    importance: Importance.max,
-    priority: Priority.high,
-  );
-  const DarwinNotificationDetails iosDetails = DarwinNotificationDetails(
-    categoryIdentifier: kIosNotificationCategory,
-  );
-  const NotificationDetails details =
-      NotificationDetails(android: androidDetails, iOS: iosDetails);
-  await flutterLocalNotificationsPlugin.show(
-    _AppConstants.testNotificationId,
-    'Angel Baby (Test)', // Specific title for test notification
-    'Immediate test notification',
-    details,
-    payload: '', // Consider defining a constant if payload structure becomes complex
-  );
-  logger.i('Immediate test notification posted');
-}
-
 Future<void> initializeNotifications() async {
   await Permission.notification.request();
 
@@ -225,7 +202,6 @@ Future<void> main() async {
   Hive.registerAdapter(DiaryEntryAdapter());
   await Hive.openBox<DiaryEntry>(kHiveBoxName);
   await initializeNotifications();
-  // await showImmediateTestNotification(); // Call this only when needed for testing
   await scheduleDailyAngelDevilNotification();
   runApp(const AngelDevilApp());
 }
