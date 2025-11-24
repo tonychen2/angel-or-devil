@@ -288,59 +288,94 @@ Future<void> scheduleDailyAngelDevilNotifications() async {
   );
   const DarwinNotificationDetails iosDetails = DarwinNotificationDetails(
     categoryIdentifier: kIosNotificationCategory,
+    presentAlert: true,
+    presentBadge: true,
+    presentSound: true,
   );
   const NotificationDetails details =
       NotificationDetails(android: androidDetails, iOS: iosDetails);
 
-  final now = DateTime.now();
+  // Use timezone-aware current time
+  final now = tz.TZDateTime.now(tz.local);
   
-  // Schedule day notification (7 AM) - prompts about last night
-  final dayTime = DateTime(now.year, now.month, now.day, _AppConstants.dayNotificationHour);
-  var scheduledDayTime = dayTime.isAfter(now) ? dayTime : dayTime.add(const Duration(days: 1));
-  final tzScheduledDayTime = tz.TZDateTime.from(scheduledDayTime, tz.local);
-
-  await flutterLocalNotificationsPlugin.cancel(_AppConstants.dayNotificationId);
-  logger.i('Cancelled any existing day notification with ID ${_AppConstants.dayNotificationId}.');
-
-  try {
-    await flutterLocalNotificationsPlugin.zonedSchedule(
-      _AppConstants.dayNotificationId,
-      _AppConstants.dailyPromptScreenTitle,
-      'Morning! Was your baby a little angel or a little devil last night?',
-      tzScheduledDayTime,
-      details,
-      androidScheduleMode: AndroidScheduleMode.inexact,
-      matchDateTimeComponents: DateTimeComponents.time,
-      payload: 'day',
-    );
-    logger.i('Day notification scheduled for $tzScheduledDayTime with ID ${_AppConstants.dayNotificationId}.');
-  } catch (e) {
-    logger.e('Failed to schedule day notification: $e');
+  // Cancel all existing notifications (cancel a range of IDs to cover 10 days)
+  // Day notifications: IDs 0-9, Night notifications: IDs 10-19
+  for (int i = 0; i < 20; i++) {
+    await flutterLocalNotificationsPlugin.cancel(i);
   }
 
-  // Schedule night notification (7 PM) - prompts about today
-  final nightTime = DateTime(now.year, now.month, now.day, _AppConstants.nightNotificationHour);
-  var scheduledNightTime = nightTime.isAfter(now) ? nightTime : nightTime.add(const Duration(days: 1));
-  final tzScheduledNightTime = tz.TZDateTime.from(scheduledNightTime, tz.local);
+  // Schedule notifications for the next 10 days
+  const int daysToSchedule = 10;
+  int dayNotificationsScheduled = 0;
+  int nightNotificationsScheduled = 0;
 
-  await flutterLocalNotificationsPlugin.cancel(_AppConstants.nightNotificationId);
-  logger.i('Cancelled any existing night notification with ID ${_AppConstants.nightNotificationId}.');
-
-  try {
-    await flutterLocalNotificationsPlugin.zonedSchedule(
-      _AppConstants.nightNotificationId,
-      _AppConstants.dailyPromptScreenTitle,
-      'Was your baby a little angel or a little devil today?',
-      tzScheduledNightTime,
-      details,
-      androidScheduleMode: AndroidScheduleMode.inexact,
-      matchDateTimeComponents: DateTimeComponents.time,
-      payload: 'night',
+  for (int dayOffset = 0; dayOffset < daysToSchedule; dayOffset++) {
+    // Calculate target date by adding days to current date
+    final targetDate = tz.TZDateTime(
+      tz.local,
+      now.year,
+      now.month,
+      now.day,
+    ).add(Duration(days: dayOffset));
+    
+    // Schedule day notification (7 AM) - prompts about last night
+    final dayTime = tz.TZDateTime(
+      tz.local,
+      targetDate.year,
+      targetDate.month,
+      targetDate.day,
+      _AppConstants.dayNotificationHour,
     );
-    logger.i('Night notification scheduled for $tzScheduledNightTime with ID ${_AppConstants.nightNotificationId}.');
-  } catch (e) {
-    logger.e('Failed to schedule night notification: $e');
+    
+    // Only schedule if the time is in the future
+    if (dayTime.isAfter(now)) {
+      final dayNotificationId = dayOffset; // Use 0-9 for day notifications
+      try {
+        await flutterLocalNotificationsPlugin.zonedSchedule(
+          dayNotificationId,
+          _AppConstants.dailyPromptScreenTitle,
+          'Morning! Was your baby a little angel or a little devil last night?',
+          dayTime,
+          details,
+          androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+          payload: 'day',
+        );
+        dayNotificationsScheduled++;
+      } catch (e) {
+        logger.e('Failed to schedule day notification for $dayTime: $e');
+      }
+    }
+
+    // Schedule night notification (7 PM) - prompts about today
+    final nightTime = tz.TZDateTime(
+      tz.local,
+      targetDate.year,
+      targetDate.month,
+      targetDate.day,
+      _AppConstants.nightNotificationHour,
+    );
+    
+    // Only schedule if the time is in the future
+    if (nightTime.isAfter(now)) {
+      final nightNotificationId = 10 + dayOffset; // Use 10-19 for night notifications
+      try {
+        await flutterLocalNotificationsPlugin.zonedSchedule(
+          nightNotificationId,
+          _AppConstants.dailyPromptScreenTitle,
+          'Was your baby a little angel or a little devil today?',
+          nightTime,
+          details,
+          androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+          payload: 'night',
+        );
+        nightNotificationsScheduled++;
+      } catch (e) {
+        logger.e('Failed to schedule night notification for $nightTime: $e');
+      }
+    }
   }
+
+  logger.i('Scheduled $dayNotificationsScheduled day notifications and $nightNotificationsScheduled night notifications for the next $daysToSchedule days.');
 }
 
 String getAngelDevilText(bool isAngel, bool isToday) {
@@ -505,12 +540,16 @@ class _LaunchDeciderState extends State<LaunchDecider> with WidgetsBindingObserv
     // Show prompt if no entry exists for CURRENT cycle
     // This ensures we always prompt for the current cycle, not past ones
     // Example: If it's after 1PM and last night wasn't logged, we check for today's day entry instead
+    // Use setState to update the UI, which keeps LaunchDecider in the widget tree
+    // and preserves the lifecycle observer
     if (entry == null) {
       if(mounted) {
         setState(() {
           _showPrompt = true;
           _restoredPage = null;
         });
+        logger.i(
+            "App resumed with no entry for current cycle. Showing DailyPromptScreen.");
       }
     } else {
       // If entry exists for current cycle, hide prompt
@@ -519,6 +558,8 @@ class _LaunchDeciderState extends State<LaunchDecider> with WidgetsBindingObserv
           _showPrompt = false;
           _restoredPage = const MainTabView();
         });
+        logger.i(
+            "App resumed with entry for current cycle. Showing MainTabView.");
       }
     }
   }
@@ -835,10 +876,9 @@ class _DiaryEntryScreenState extends State<DiaryEntryScreen> {
                       await box.put(cycleKey, entry);
                       logger.i('Entry saved successfully from DiaryEntryScreen');
                       if (mounted) {
-                        Navigator.of(context).pushAndRemoveUntil(
-                          MaterialPageRoute(builder: (context) => const MainTabView()),
-                          (Route<dynamic> route) => false,
-                        );
+                        // Pop back to DailyPromptScreen, which will then call onComplete
+                        // to navigate back to LaunchDecider showing MainTabView
+                        Navigator.of(context).pop();
                       }
                     },
                     child: const Text('Save'), // Could be a const
