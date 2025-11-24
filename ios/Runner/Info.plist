@@ -47,10 +47,7 @@
 	<true/>
 	<key>UIBackgroundModes</key>
 	<array>
-		<string>remote-notification</string>
 	</array>
-	<key>APSEnvironment</key>
-	<string>development</string>
 	<key>NSUserNotificationsUsageDescription</key>
 	<string>We need permission to send you daily reminders to log your baby's day.</string>
 </dict>

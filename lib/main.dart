@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'models/entry.dart';
@@ -390,44 +391,78 @@ String getAngelDevilText(bool isAngel, bool isToday) {
 }
 
 Future<void> main() async {
-  WidgetsFlutterBinding.ensureInitialized();
+  // Set up error handlers before anything else
+  FlutterError.onError = (FlutterErrorDetails details) {
+    FlutterError.presentError(details);
+    logger.e('FlutterError: ${details.exception}');
+    logger.e('Stack: ${details.stack}');
+  };
   
-  try {
-    tzdata.initializeTimeZones();
-    String localTimeZone = 'UTC'; // Default timezone
+  // Use runZonedGuarded to catch any unhandled async errors
+  runZonedGuarded(() async {
+    WidgetsFlutterBinding.ensureInitialized();
+    
+    // Initialize timezones with error handling
     try {
-      localTimeZone = await FlutterTimezone.getLocalTimezone();
+      tzdata.initializeTimeZones();
+      String localTimeZone = 'UTC'; // Default timezone
+      try {
+        localTimeZone = await FlutterTimezone.getLocalTimezone();
+      } catch (e) {
+        logger.w('Failed to get local timezone: $e. Defaulting to UTC.');
+      }
+      try {
+        tz.setLocalLocation(tz.getLocation(localTimeZone));
+      } catch (e) {
+        logger.w('Failed to set timezone location: $e. Using UTC.');
+        tz.setLocalLocation(tz.getLocation('UTC'));
+      }
     } catch (e) {
-      logger.w('Failed to get local timezone: $e. Defaulting to UTC.');
+      logger.e('Error initializing timezones: $e');
+      // Continue even if timezone initialization fails
     }
+    
+    // Initialize Hive with better error handling
     try {
-      tz.setLocalLocation(tz.getLocation(localTimeZone));
-    } catch (e) {
-      logger.w('Failed to set timezone location: $e. Using UTC.');
-      tz.setLocalLocation(tz.getLocation('UTC'));
+      await Hive.initFlutter();
+      Hive.registerAdapter(DiaryEntryAdapter());
+      await Hive.openBox<DiaryEntry>(kHiveBoxName);
+    } catch (e, stackTrace) {
+      logger.e('Error initializing Hive: $e');
+      logger.e('Stack trace: $stackTrace');
+      // Don't rethrow - try to continue anyway
+      // The app will handle missing Hive box gracefully in _decideInitialScreen
     }
-  } catch (e) {
-    logger.e('Error initializing timezones: $e');
-  }
-  
-  try {
-    await Hive.initFlutter();
-    Hive.registerAdapter(DiaryEntryAdapter());
-    await Hive.openBox<DiaryEntry>(kHiveBoxName);
-  } catch (e) {
-    logger.e('Error initializing Hive: $e');
-    rethrow; // Hive is critical, so rethrow
-  }
-  
-  try {
-    await initializeNotifications();
-    await scheduleDailyAngelDevilNotifications();
-  } catch (e) {
-    logger.e('Error initializing notifications: $e');
-    // Don't rethrow - notifications are not critical for app startup
-  }
-  
-  runApp(const AngelDevilApp());
+    
+    // Start the app immediately - don't wait for anything
+    runApp(const AngelDevilApp());
+    
+    // Initialize notifications asynchronously AFTER app starts
+    // This is critical on iOS where permission dialogs can block startup
+    // Using a small delay to ensure app is fully started
+    Future.delayed(const Duration(milliseconds: 500), () {
+      initializeNotifications().then((_) {
+        // Schedule notifications after initialization completes
+        scheduleDailyAngelDevilNotifications().catchError((e) {
+          logger.e('Error scheduling notifications: $e');
+        });
+      }).catchError((e) {
+        logger.e('Error initializing notifications: $e');
+        // Notifications are not critical for app startup
+      });
+    });
+  }, (error, stackTrace) {
+    // Catch any unhandled errors
+    logger.e('Unhandled error in main: $error');
+    logger.e('Stack trace: $stackTrace');
+    // Try to run the app anyway
+    try {
+      runApp(const AngelDevilApp());
+    } catch (e) {
+      // If even runApp fails, at least log it
+      logger.e('Failed to run app: $e');
+    }
+  });
 }
 
 class AngelDevilApp extends StatelessWidget {
@@ -476,7 +511,8 @@ class _LaunchDeciderState extends State<LaunchDecider> with WidgetsBindingObserv
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    _decideInitialScreen();
+    // Use a small delay to ensure Hive is fully initialized
+    Future.microtask(() => _decideInitialScreen());
   }
 
   @override
@@ -497,29 +533,67 @@ class _LaunchDeciderState extends State<LaunchDecider> with WidgetsBindingObserv
   }
 
   Future<void> _decideInitialScreen() async {
-    final box = Hive.box<DiaryEntry>(kHiveBoxName);
-    final isDay = getCurrentCycleIsDay(); // Entry type we're logging
-    final cycleDate = getCurrentCycleDate(); // Date for the entry
-    final cycleKey = cycleDate.toHiveKeyForCycle(isDay);
-    final entry = box.get(cycleKey);
-
-    Widget restoredPage = const MainTabView();
-
-    // Show prompt if no entry exists for current cycle
-    if (entry == null) {
-      if(mounted) {
-        setState(() {
-          _showPrompt = true;
-          _loading = false;
-          _restoredPage = null;
-        });
+    try {
+      // Wait for Hive box to be ready with a timeout
+      int retries = 0;
+      const maxRetries = 10;
+      while (!Hive.isBoxOpen(kHiveBoxName) && retries < maxRetries) {
+        await Future.delayed(const Duration(milliseconds: 100));
+        retries++;
       }
-    } else {
+      
+      // Ensure Hive box is open before accessing it
+      if (!Hive.isBoxOpen(kHiveBoxName)) {
+        try {
+          await Hive.openBox<DiaryEntry>(kHiveBoxName);
+        } catch (e) {
+          logger.e('Failed to open Hive box: $e');
+          // If we can't open the box, show main view anyway
+          if(mounted) {
+            setState(() {
+              _showPrompt = false;
+              _loading = false;
+              _restoredPage = const MainTabView();
+            });
+          }
+          return;
+        }
+      }
+      
+      final box = Hive.box<DiaryEntry>(kHiveBoxName);
+      final isDay = getCurrentCycleIsDay(); // Entry type we're logging
+      final cycleDate = getCurrentCycleDate(); // Date for the entry
+      final cycleKey = cycleDate.toHiveKeyForCycle(isDay);
+      final entry = box.get(cycleKey);
+
+      Widget restoredPage = const MainTabView();
+
+      // Show prompt if no entry exists for current cycle
+      if (entry == null) {
+        if(mounted) {
+          setState(() {
+            _showPrompt = true;
+            _loading = false;
+            _restoredPage = null;
+          });
+        }
+      } else {
+        if(mounted) {
+          setState(() {
+            _showPrompt = false;
+            _loading = false;
+            _restoredPage = restoredPage;
+          });
+        }
+      }
+    } catch (e) {
+      logger.e('Error in _decideInitialScreen: $e');
+      // Always set loading to false, even on error, to prevent stuck loading screen
       if(mounted) {
         setState(() {
           _showPrompt = false;
           _loading = false;
-          _restoredPage = restoredPage;
+          _restoredPage = const MainTabView();
         });
       }
     }
