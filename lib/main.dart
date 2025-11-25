@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'models/entry.dart';
 import 'package:hive_flutter/hive_flutter.dart';
+import 'package:hive/hive.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:logger/logger.dart';
 import 'package:flutter/services.dart';
@@ -379,6 +380,106 @@ Future<void> scheduleDailyAngelDevilNotifications() async {
   logger.i('Scheduled $dayNotificationsScheduled day notifications and $nightNotificationsScheduled night notifications for the next $daysToSchedule days.');
 }
 
+/// Migrate old entries from single-entry-per-day format to day/night format
+/// Old format: key = "2024-11-24T00:00:00.000" (just date), entry has 3 fields (no isDay)
+/// New format: key = "2024-11-24T00:00:00.000_day" or "_night", entry has 4 fields (with isDay)
+/// 
+/// Note: The DiaryEntryAdapter has been modified to read both old (3 fields) and new (4 fields) formats,
+/// so we can read old entries directly without switching adapters.
+Future<void> _migrateOldEntries(Box<DiaryEntry> box) async {
+  try {
+    final allKeys = box.keys.toList();
+    final oldFormatKeys = <String>[];
+    
+    // Find keys that match the old format (no _day or _night suffix)
+    for (final key in allKeys) {
+      final keyString = key.toString();
+      if (!keyString.endsWith('_day') && !keyString.endsWith('_night')) {
+        oldFormatKeys.add(keyString);
+      }
+    }
+    
+    if (oldFormatKeys.isEmpty) {
+      // No old entries to migrate
+      logger.i('No old-format entries found to migrate');
+      return;
+    }
+    
+    logger.i('Found ${oldFormatKeys.length} old-format entries to migrate');
+    
+    int migratedCount = 0;
+    
+    // Read and migrate each old entry
+    // The adapter can now read both formats, so we can read old entries directly
+    for (final oldKey in oldFormatKeys) {
+      try {
+        // Try to read the old entry (adapter will handle 3-field format)
+        final oldEntry = box.get(oldKey);
+        if (oldEntry == null) {
+          logger.w('Entry $oldKey is null, skipping');
+          continue;
+        }
+        
+        // Parse the date from the key to avoid DST issues
+        // The key format is "2024-11-24T00:00:00.000" (ISO8601)
+        // Parse it and extract just the date components (year, month, day) to avoid DST problems
+        DateTime correctDate;
+        try {
+          final parsedDate = DateTime.parse(oldKey.toString());
+          // Extract date components and create a new local DateTime to avoid DST issues
+          // This ensures we use the intended date from the key, not the potentially shifted stored date
+          correctDate = DateTime(parsedDate.year, parsedDate.month, parsedDate.day);
+          logger.i('Parsed date from key $oldKey: $correctDate (extracted from key to avoid DST bug)');
+          
+          // Check if the stored date differs from the key date (indicates DST bug)
+          if (oldEntry.date.dateOnly != correctDate) {
+            logger.w('DST bug detected: stored date ${oldEntry.date.dateOnly} differs from key date $correctDate');
+          }
+        } catch (parseError) {
+          // If parsing fails, fall back to stored date but log a warning
+          logger.w('Failed to parse date from key $oldKey, using stored date: $parseError');
+          correctDate = oldEntry.date.dateOnly;
+        }
+        
+        logger.i('Read old entry $oldKey: storedDate=${oldEntry.date}, correctDate=$correctDate, isAngel=${oldEntry.isAngel}, note=${oldEntry.note}');
+        
+        // Create new entry with day format using the correct date
+        final newKey = correctDate.toHiveKeyForCycle(true); // Default to day
+        
+        // Check if new key already exists
+        if (!box.containsKey(newKey)) {
+          // Create new entry with day format using the correct date
+          final newEntry = DiaryEntry(
+            date: correctDate,
+            isAngel: oldEntry.isAngel,
+            note: oldEntry.note,
+            isDay: true, // Default old entries to day entries
+          );
+          await box.put(newKey, newEntry);
+          migratedCount++;
+          logger.i('Migrated entry from $oldKey to $newKey (corrected date from DST bug)');
+        } else {
+          logger.w('New key $newKey already exists, skipping migration of $oldKey');
+        }
+        
+        // Delete the old entry
+        await box.delete(oldKey);
+        logger.i('Deleted old entry $oldKey');
+      } catch (e, stackTrace) {
+        logger.e('Error migrating entry $oldKey: $e');
+        logger.e('Stack trace: $stackTrace');
+        // Continue with other entries
+      }
+    }
+    
+    logger.i('Migration completed. Migrated $migratedCount of ${oldFormatKeys.length} entries.');
+  } catch (e, stackTrace) {
+    logger.e('Error during migration: $e');
+    logger.e('Stack trace: $stackTrace');
+    // Don't throw - migration failure shouldn't prevent app from starting
+  }
+}
+
 String getAngelDevilText(bool isAngel, bool isToday) {
   // These strings are good candidates for constants if they are used elsewhere or for localization
   return isToday
@@ -426,7 +527,16 @@ Future<void> main() async {
     try {
       await Hive.initFlutter();
       Hive.registerAdapter(DiaryEntryAdapter());
-      await Hive.openBox<DiaryEntry>(kHiveBoxName);
+      final box = await Hive.openBox<DiaryEntry>(kHiveBoxName);
+      
+      // Migrate old entries from single-entry-per-day format to day/night format
+      // Note: migration may close and reopen the box, so we don't use the box reference after
+      await _migrateOldEntries(box);
+      
+      // Ensure box is open after migration (migration closes/reopens it)
+      if (!Hive.isBoxOpen(kHiveBoxName)) {
+        await Hive.openBox<DiaryEntry>(kHiveBoxName);
+      }
     } catch (e, stackTrace) {
       logger.e('Error initializing Hive: $e');
       logger.e('Stack trace: $stackTrace');

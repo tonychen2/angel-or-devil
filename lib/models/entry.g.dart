@@ -16,12 +16,24 @@ class DiaryEntryAdapter extends TypeAdapter<DiaryEntry> {
     final fields = <int, dynamic>{
       for (int i = 0; i < numOfFields; i++) reader.readByte(): reader.read(),
     };
-    return DiaryEntry(
-      date: fields[0] as DateTime,
-      isAngel: fields[1] as bool,
-      note: fields[2] as String,
-      isDay: fields[3] as bool,
-    );
+    // Handle both old format (3 fields) and new format (4 fields) for backward compatibility
+    if (numOfFields == 3) {
+      // Old format: date, isAngel, note (no isDay) - default to day
+      return DiaryEntry(
+        date: fields[0] as DateTime,
+        isAngel: fields[1] as bool,
+        note: fields[2] as String,
+        isDay: true, // Default old entries to day entries
+      );
+    } else {
+      // New format: date, isAngel, note, isDay
+      return DiaryEntry(
+        date: fields[0] as DateTime,
+        isAngel: fields[1] as bool,
+        note: fields[2] as String,
+        isDay: fields[3] as bool,
+      );
+    }
   }
 
   @override
