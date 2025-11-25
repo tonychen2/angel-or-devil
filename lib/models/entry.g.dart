@@ -20,19 +20,22 @@ class DiaryEntryAdapter extends TypeAdapter<DiaryEntry> {
       date: fields[0] as DateTime,
       isAngel: fields[1] as bool,
       note: fields[2] as String,
+      isDay: fields[3] as bool,
     );
   }
 
   @override
   void write(BinaryWriter writer, DiaryEntry obj) {
     writer
-      ..writeByte(3)
+      ..writeByte(4)
       ..writeByte(0)
       ..write(obj.date)
       ..writeByte(1)
       ..write(obj.isAngel)
       ..writeByte(2)
-      ..write(obj.note);
+      ..write(obj.note)
+      ..writeByte(3)
+      ..write(obj.isDay);
   }
 
   @override

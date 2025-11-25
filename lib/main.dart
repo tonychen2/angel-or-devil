@@ -53,9 +53,12 @@ class _AppConstants {
   static const double calendarGridIconScaleFactor = 0.4;
 
   // Numerical Constants
-  static const int promptEligibilityHour = 17; // 5 PM
-  static const int dailyNotificationHour = 19; // 7 PM
-  static const int dailyNotificationId = 0;
+  static const int dayCycleStartHour = 13; // 1 PM - cycle starts
+  static const int nightCycleStartHour = 1; // 1 AM - cycle starts
+  static const int dayNotificationHour = 7; // 7 AM - notification time
+  static const int nightNotificationHour = 19; // 7 PM - notification time
+  static const int dayNotificationId = 0;
+  static const int nightNotificationId = 1;
   static const int navigatorPushDelayMillis = 500;
 
   // Text
@@ -72,6 +75,66 @@ class _AppConstants {
 extension DateTimeExtension on DateTime {
   DateTime get dateOnly => DateTime(year, month, day);
   String get toHiveKey => dateOnly.toIso8601String();
+  
+  // Get Hive key for day/night entry
+  // Night entries (7pm-7am) are stored with the date of the evening (e.g., night of Nov 4 = Nov 4)
+  String toHiveKeyForCycle(bool isDay) {
+    if (isDay) {
+      return dateOnly.toIso8601String() + '_day';
+    } else {
+      // For night cycle, use the date of the evening (7pm is part of that day)
+      return dateOnly.toIso8601String() + '_night';
+    }
+  }
+}
+
+// Helper functions for day/night cycles
+// Day cycle: 1PM to 1AM (next day) - logs about the day
+// Night cycle: 1AM to 1PM - logs about last night
+bool isCurrentlyDayCycle() {
+  final now = DateTime.now();
+  final hour = now.hour;
+  // Day cycle is from 1PM (13) to 1AM (1) next day
+  // This means hour >= 13 OR hour < 1
+  return hour >= _AppConstants.dayCycleStartHour || hour < _AppConstants.nightCycleStartHour;
+}
+
+bool isCurrentlyNightCycle() {
+  return !isCurrentlyDayCycle();
+}
+
+// Get the date for the entry being logged in the current cycle
+// During day cycle (1PM-1AM): logging about today's day, so return today's date
+// During night cycle (1AM-1PM): logging about last night, so return yesterday's date
+DateTime getCurrentCycleDate() {
+  final now = DateTime.now();
+  if (isCurrentlyDayCycle()) {
+    // Day cycle: logging about today's day, so use today
+    return now.dateOnly;
+  } else {
+    // Night cycle: logging about last night, so use yesterday
+    return now.subtract(const Duration(days: 1)).dateOnly;
+  }
+}
+
+// Get whether we're logging a day or night entry in the current cycle
+// During day cycle (1PM-1AM): logging about today's day, so isDay = true
+// During night cycle (1AM-1PM): logging about last night, so isDay = false
+bool getCurrentCycleIsDay() {
+  return isCurrentlyDayCycle(); // Day cycle logs day entries, night cycle logs night entries
+}
+
+// Get the date for a night cycle entry
+// Night of Nov 4 (1am Nov 5 - 1pm Nov 4) should be stored as Nov 4
+// This function is kept for potential future use but may not be needed with new cycle logic
+DateTime getNightCycleDate(DateTime dateTime) {
+  final hour = dateTime.hour;
+  // If it's before 1PM, the night belongs to the previous day (for entries logged in morning)
+  if (hour < _AppConstants.dayCycleStartHour) {
+    return dateTime.subtract(const Duration(days: 1)).dateOnly;
+  }
+  // Otherwise, it's the same day
+  return dateTime.dateOnly;
 }
 
 final logger = Logger();
@@ -82,9 +145,35 @@ final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
 Future<void> initializeNotifications() async {
   try {
-    await Permission.notification.request();
+    // Check iOS notification settings using the plugin's method
+    final bool? iosPermissionGranted = await flutterLocalNotificationsPlugin
+        .resolvePlatformSpecificImplementation<
+            IOSFlutterLocalNotificationsPlugin>()
+        ?.requestPermissions(
+          alert: true,
+          badge: true,
+          sound: true,
+        );
+    
+    if (iosPermissionGranted != null) {
+      logger.i('iOS notification permission granted: $iosPermissionGranted');
+    }
+    
+    // Also check Android permissions
+    final bool? androidPermissionGranted = await flutterLocalNotificationsPlugin
+        .resolvePlatformSpecificImplementation<
+            AndroidFlutterLocalNotificationsPlugin>()
+        ?.requestNotificationsPermission();
+    
+    if (androidPermissionGranted != null) {
+      logger.i('Android notification permission granted: $androidPermissionGranted');
+    }
+    
+    // Fallback to permission_handler for additional checks
+    final status = await Permission.notification.status;
+    logger.i('Notification permission status (permission_handler): $status');
   } catch (e) {
-    logger.w('Failed to request notification permission: $e');
+    logger.e('Failed to request notification permission: $e');
   }
 
   const AndroidInitializationSettings androidInit =
@@ -143,7 +232,53 @@ Future<void> initializeNotifications() async {
   );
 }
 
-Future<void> scheduleDailyAngelDevilNotification() async {
+Future<void> scheduleDailyAngelDevilNotifications() async {
+  // Check permission using the plugin's method (more reliable)
+  bool hasPermission = false;
+  
+  try {
+    // Check iOS
+    final iosImplementation = flutterLocalNotificationsPlugin
+        .resolvePlatformSpecificImplementation<
+            IOSFlutterLocalNotificationsPlugin>();
+    if (iosImplementation != null) {
+      final bool? iosPermission = await iosImplementation.requestPermissions(
+        alert: true,
+        badge: true,
+        sound: true,
+      );
+      hasPermission = iosPermission ?? false;
+      logger.i('iOS notification permission check: $hasPermission');
+    }
+    
+    // Check Android
+    final androidImplementation = flutterLocalNotificationsPlugin
+        .resolvePlatformSpecificImplementation<
+            AndroidFlutterLocalNotificationsPlugin>();
+    if (androidImplementation != null) {
+      final bool? androidPermission = await androidImplementation
+          .requestNotificationsPermission();
+      hasPermission = androidPermission ?? false;
+      logger.i('Android notification permission check: $hasPermission');
+    }
+    
+    // Fallback check
+    if (!hasPermission) {
+      final permissionStatus = await Permission.notification.status;
+      logger.i('Fallback permission check: $permissionStatus');
+      hasPermission = permissionStatus.isGranted;
+    }
+  } catch (e) {
+    logger.e('Error checking notification permission: $e');
+  }
+  
+  if (!hasPermission) {
+    logger.w('Notification permission not granted. Notifications will not be scheduled.');
+    return;
+  }
+  
+  logger.i('Notification permission confirmed. Proceeding to schedule notifications.');
+
   const AndroidNotificationDetails androidDetails = AndroidNotificationDetails(
     kNotificationChannelId,
     kNotificationChannelName,
@@ -158,26 +293,54 @@ Future<void> scheduleDailyAngelDevilNotification() async {
       NotificationDetails(android: androidDetails, iOS: iosDetails);
 
   final now = DateTime.now();
-  final time = DateTime(now.year, now.month, now.day, _AppConstants.dailyNotificationHour);
-  var scheduledTime = time.isAfter(now) ? time : time.add(const Duration(days: 1));
-  final tzScheduledTime = tz.TZDateTime.from(scheduledTime, tz.local);
+  
+  // Schedule day notification (7 AM) - prompts about last night
+  final dayTime = DateTime(now.year, now.month, now.day, _AppConstants.dayNotificationHour);
+  var scheduledDayTime = dayTime.isAfter(now) ? dayTime : dayTime.add(const Duration(days: 1));
+  final tzScheduledDayTime = tz.TZDateTime.from(scheduledDayTime, tz.local);
 
-  await flutterLocalNotificationsPlugin.cancel(_AppConstants.dailyNotificationId);
-  logger.i(
-      'Cancelled any existing daily notification with ID ${_AppConstants.dailyNotificationId}.');
+  await flutterLocalNotificationsPlugin.cancel(_AppConstants.dayNotificationId);
+  logger.i('Cancelled any existing day notification with ID ${_AppConstants.dayNotificationId}.');
 
-  await flutterLocalNotificationsPlugin.zonedSchedule(
-    _AppConstants.dailyNotificationId,
-    _AppConstants.dailyPromptScreenTitle,
-    'Was your baby a little angel or a little devil today?', // This string can be a const too
-    tzScheduledTime,
-    details,
-    androidScheduleMode: AndroidScheduleMode.inexact,
-    matchDateTimeComponents: DateTimeComponents.time,
-    payload: '',
-  );
-  logger.i(
-      'Daily notification scheduled for $tzScheduledTime with ID ${_AppConstants.dailyNotificationId}.');
+  try {
+    await flutterLocalNotificationsPlugin.zonedSchedule(
+      _AppConstants.dayNotificationId,
+      _AppConstants.dailyPromptScreenTitle,
+      'Morning! Was your baby a little angel or a little devil last night?',
+      tzScheduledDayTime,
+      details,
+      androidScheduleMode: AndroidScheduleMode.inexact,
+      matchDateTimeComponents: DateTimeComponents.time,
+      payload: 'day',
+    );
+    logger.i('Day notification scheduled for $tzScheduledDayTime with ID ${_AppConstants.dayNotificationId}.');
+  } catch (e) {
+    logger.e('Failed to schedule day notification: $e');
+  }
+
+  // Schedule night notification (7 PM) - prompts about today
+  final nightTime = DateTime(now.year, now.month, now.day, _AppConstants.nightNotificationHour);
+  var scheduledNightTime = nightTime.isAfter(now) ? nightTime : nightTime.add(const Duration(days: 1));
+  final tzScheduledNightTime = tz.TZDateTime.from(scheduledNightTime, tz.local);
+
+  await flutterLocalNotificationsPlugin.cancel(_AppConstants.nightNotificationId);
+  logger.i('Cancelled any existing night notification with ID ${_AppConstants.nightNotificationId}.');
+
+  try {
+    await flutterLocalNotificationsPlugin.zonedSchedule(
+      _AppConstants.nightNotificationId,
+      _AppConstants.dailyPromptScreenTitle,
+      'Was your baby a little angel or a little devil today?',
+      tzScheduledNightTime,
+      details,
+      androidScheduleMode: AndroidScheduleMode.inexact,
+      matchDateTimeComponents: DateTimeComponents.time,
+      payload: 'night',
+    );
+    logger.i('Night notification scheduled for $tzScheduledNightTime with ID ${_AppConstants.nightNotificationId}.');
+  } catch (e) {
+    logger.e('Failed to schedule night notification: $e');
+  }
 }
 
 String getAngelDevilText(bool isAngel, bool isToday) {
@@ -223,7 +386,7 @@ Future<void> main() async {
   
   try {
     await initializeNotifications();
-    await scheduleDailyAngelDevilNotification();
+    await scheduleDailyAngelDevilNotifications();
   } catch (e) {
     logger.e('Error initializing notifications: $e');
     // Don't rethrow - notifications are not critical for app startup
@@ -294,20 +457,21 @@ class _LaunchDeciderState extends State<LaunchDecider> with WidgetsBindingObserv
       logger.i(
           'App resumed. Re-evaluating prompt and re-scheduling daily notification.');
       await _checkPromptOnResume();
-      await scheduleDailyAngelDevilNotification();
+      await scheduleDailyAngelDevilNotifications();
     }
   }
 
   Future<void> _decideInitialScreen() async {
-    final now = DateTime.now();
-    final promptTime = DateTime(now.year, now.month, now.day, _AppConstants.promptEligibilityHour);
     final box = Hive.box<DiaryEntry>(kHiveBoxName);
-    final todayKey = now.toHiveKey;
-    final entry = box.get(todayKey);
+    final isDay = getCurrentCycleIsDay(); // Entry type we're logging
+    final cycleDate = getCurrentCycleDate(); // Date for the entry
+    final cycleKey = cycleDate.toHiveKeyForCycle(isDay);
+    final entry = box.get(cycleKey);
 
     Widget restoredPage = const MainTabView();
 
-    if (now.isAfter(promptTime) && entry == null) {
+    // Show prompt if no entry exists for current cycle
+    if (entry == null) {
       if(mounted) {
         setState(() {
           _showPrompt = true;
@@ -327,19 +491,34 @@ class _LaunchDeciderState extends State<LaunchDecider> with WidgetsBindingObserv
   }
 
   Future<void> _checkPromptOnResume() async {
-    final now = DateTime.now();
-    final promptTime = DateTime(now.year, now.month, now.day, _AppConstants.promptEligibilityHour);
     final box = Hive.box<DiaryEntry>(kHiveBoxName);
-    final todayKey = now.toHiveKey;
-    final entry = box.get(todayKey);
-    if (now.isAfter(promptTime) && entry == null) {
-      if (_showPrompt != true) {
-        if(mounted) {
-          setState(() {
-            _showPrompt = true;
-            _restoredPage = null;
-          });
-        }
+    // Always check the CURRENT cycle when app resumes
+    // Cycle boundaries:
+    // - Day cycle (1PM-1AM): checks for day entry
+    // - Night cycle (1AM-1PM): checks for night entry (last night)
+    // Don't show prompts for past cycles that were missed
+    final isDay = getCurrentCycleIsDay(); // Entry type we're logging for current cycle
+    final cycleDate = getCurrentCycleDate(); // Date for the current cycle entry
+    final cycleKey = cycleDate.toHiveKeyForCycle(isDay);
+    final entry = box.get(cycleKey);
+    
+    // Show prompt if no entry exists for CURRENT cycle
+    // This ensures we always prompt for the current cycle, not past ones
+    // Example: If it's after 1PM and last night wasn't logged, we check for today's day entry instead
+    if (entry == null) {
+      if(mounted) {
+        setState(() {
+          _showPrompt = true;
+          _restoredPage = null;
+        });
+      }
+    } else {
+      // If entry exists for current cycle, hide prompt
+      if (_showPrompt == true && mounted) {
+        setState(() {
+          _showPrompt = false;
+          _restoredPage = const MainTabView();
+        });
       }
     }
   }
@@ -442,8 +621,18 @@ class DailyPromptScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final box = Hive.box<DiaryEntry>(kHiveBoxName);
-    final today = DateTime.now().dateOnly;
-    final entry = box.get(today.toHiveKey);
+    final isDay = getCurrentCycleIsDay(); // This is the entry type we're logging
+    final cycleDate = getCurrentCycleDate(); // This is the date for the entry
+    final cycleKey = cycleDate.toHiveKeyForCycle(isDay);
+    final entry = box.get(cycleKey);
+    
+    // Show different text based on current cycle
+    // Day cycle (1PM-1AM): logging about today's day
+    // Night cycle (1AM-1PM): logging about last night
+    final isCurrentlyDay = isCurrentlyDayCycle();
+    final promptText = isCurrentlyDay 
+        ? 'Was your baby a little angel or a little devil today?'
+        : 'Morning! Was your baby a little angel or a little devil last night?';
 
     return Scaffold(
       appBar: AppBar(
@@ -455,19 +644,19 @@ class DailyPromptScreen extends StatelessWidget {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              const Text(
-                'Was your baby a little angel or a little devil today?',
-                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+              Text(
+                promptText,
+                style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: _AppConstants.spacingXLarge),
               Wrap(
                 alignment: WrapAlignment.center,
                 spacing: _AppConstants.spacingLarge,
-                runSpacing: _AppConstants.spacingLarge, // Added for better wrap on small screens
+                runSpacing: _AppConstants.spacingLarge,
                 children: [
-                  _buildChoiceButton(context, box, today, entry, true),
-                  _buildChoiceButton(context, box, today, entry, false),
+                  _buildChoiceButton(context, box, cycleDate, isDay, entry, true),
+                  _buildChoiceButton(context, box, cycleDate, isDay, entry, false),
                 ],
               ),
             ],
@@ -480,7 +669,8 @@ class DailyPromptScreen extends StatelessWidget {
   Widget _buildChoiceButton(
     BuildContext context,
     Box<DiaryEntry> box,
-    DateTime today,
+    DateTime cycleDate,
+    bool isDay,
     DiaryEntry? currentEntry,
     bool isAngelChoice,
   ) {
@@ -491,17 +681,22 @@ class DailyPromptScreen extends StatelessWidget {
     return GestureDetector(
       onTap: () async {
         final newEntry = DiaryEntry(
-          date: today,
+          date: cycleDate,
           isAngel: isAngelChoice,
           note: currentEntry?.note ?? '',
+          isDay: isDay,
         );
-        await box.put(today.toHiveKey, newEntry);
-        // It's generally better to pass the full date to DiaryEntryScreen if it might be needed
-        // but current implementation of DiaryEntryScreen fetches today's entry again.
+        final cycleKey = cycleDate.toHiveKeyForCycle(isDay);
+        await box.put(cycleKey, newEntry);
         Navigator.push(
           context,
           MaterialPageRoute(
-            builder: (context) => DiaryEntryScreen(isAngel: isAngelChoice, note: newEntry.note),
+            builder: (context) => DiaryEntryScreen(
+              isAngel: isAngelChoice,
+              note: newEntry.note,
+              isDay: isDay,
+              entryDate: cycleDate,
+            ),
           ),
         ).then((_) {
           if (onComplete != null) onComplete!();
@@ -518,7 +713,7 @@ class DailyPromptScreen extends StatelessWidget {
                 : _AppConstants.defaultIconBorder,
             width: 2,
           ),
-          borderRadius: BorderRadius.circular(12), // This could be a const (_AppConstants.borderRadiusMedium)
+          borderRadius: BorderRadius.circular(12),
         ),
         padding: const EdgeInsets.all(_AppConstants.spacingSmall),
         child: SvgPicture.asset(
@@ -534,7 +729,15 @@ class DailyPromptScreen extends StatelessWidget {
 class DiaryEntryScreen extends StatefulWidget {
   final bool isAngel; // Initial angel/devil choice from prompt screen
   final String note;  // Initial note from prompt screen
-  const DiaryEntryScreen({super.key, required this.isAngel, this.note = ''});
+  final bool isDay;   // Whether this is a day or night entry
+  final DateTime entryDate; // Date for this entry
+  const DiaryEntryScreen({
+    super.key,
+    required this.isAngel,
+    this.note = '',
+    required this.isDay,
+    required this.entryDate,
+  });
 
   @override
   State<DiaryEntryScreen> createState() => _DiaryEntryScreenState();
@@ -552,18 +755,15 @@ class _DiaryEntryScreenState extends State<DiaryEntryScreen> {
     _controller = TextEditingController(text: widget.note);
 
     // Potentially override with persisted data if user navigates back and then to this screen again
-    // for the *same day* if the DiaryEntryScreen is somehow kept in stack or re-created for today.
-    // However, the current navigation flow from DailyPromptScreen to here, and then to MainTabView,
-    // typically means this screen is fresh. But this check adds robustness.
     final box = Hive.box<DiaryEntry>(kHiveBoxName);
-    final todayKey = DateTime.now().toHiveKey;
-    final persistedEntryForToday = box.get(todayKey);
+    final cycleKey = widget.entryDate.toHiveKeyForCycle(widget.isDay);
+    final persistedEntry = box.get(cycleKey);
 
-    if (persistedEntryForToday != null) {
-      _isAngelSelected = persistedEntryForToday.isAngel;
+    if (persistedEntry != null) {
+      _isAngelSelected = persistedEntry.isAngel;
       // Preserve text if user already started typing on this screen, otherwise use persisted note.
-      if (_controller.text.isEmpty && persistedEntryForToday.note.isNotEmpty) {
-        _controller.text = persistedEntryForToday.note;
+      if (_controller.text.isEmpty && persistedEntry.note.isNotEmpty) {
+        _controller.text = persistedEntry.note;
       }
     }
   }
@@ -625,13 +825,14 @@ class _DiaryEntryScreenState extends State<DiaryEntryScreen> {
                         foregroundColor: _AppConstants.appBarForeground),
                     onPressed: () async {
                       final box = Hive.box<DiaryEntry>(kHiveBoxName);
-                      final today = DateTime.now().dateOnly;
+                      final cycleKey = widget.entryDate.toHiveKeyForCycle(widget.isDay);
                       final entry = DiaryEntry(
-                        date: today,
+                        date: widget.entryDate,
                         isAngel: _isAngelSelected,
                         note: _controller.text.trim(),
+                        isDay: widget.isDay,
                       );
-                      await box.put(today.toHiveKey, entry);
+                      await box.put(cycleKey, entry);
                       logger.i('Entry saved successfully from DiaryEntryScreen');
                       if (mounted) {
                         Navigator.of(context).pushAndRemoveUntil(
@@ -844,7 +1045,13 @@ class _CalendarViewBodyState extends State<_CalendarViewBody> with WidgetsBindin
           gridStartDay.day + index,
         ).dateOnly;
         final isCurrentDisplayMonth = date.month == _displayMonth.month;
-        final entry = box.get(date.toHiveKey);
+        
+        // Get both day and night entries for this date
+        final dayEntry = box.get(date.toHiveKeyForCycle(true));
+        final nightEntry = box.get(date.toHiveKeyForCycle(false));
+        final hasDayEntry = dayEntry != null;
+        final hasNightEntry = nightEntry != null;
+        
         final isToday = date == today;
         final isFutureDate = date.isAfter(today);
 
@@ -856,10 +1063,11 @@ class _CalendarViewBodyState extends State<_CalendarViewBody> with WidgetsBindin
                     context: context,
                     builder: (context) => _DayDetailDialog(
                       entryDate: date,
-                      existingEntry: entry,
+                      dayEntry: dayEntry,
+                      nightEntry: nightEntry,
                       onSave: (updatedEntry) {
-                        box.put(updatedEntry.date.toHiveKey, updatedEntry);
-                        Navigator.pop(context); // Close dialog
+                        final cycleKey = updatedEntry.date.toHiveKeyForCycle(updatedEntry.isDay);
+                        box.put(cycleKey, updatedEntry);
                         if (mounted) setState(() {}); // Rebuild calendar to show changes
                       },
                     ),
@@ -902,18 +1110,40 @@ class _CalendarViewBodyState extends State<_CalendarViewBody> with WidgetsBindin
                         ),
                         textAlign: TextAlign.center,
                       ),
-                      if (entry != null && !isFutureDate)
-                        SizedBox(
-                          width: iconSize,
-                          height: iconSize,
-                          child: FittedBox(
-                            fit: BoxFit.contain,
-                            child: SvgPicture.asset(
-                              entry.isAngel ? 'assets/angel.svg' : 'assets/devil.svg',
-                              width: iconSize,
-                              height: iconSize,
-                            ),
-                          ),
+                      if (!isFutureDate && (hasDayEntry || hasNightEntry))
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            if (hasDayEntry)
+                              SizedBox(
+                                width: iconSize * 0.8,
+                                height: iconSize * 0.8,
+                                child: FittedBox(
+                                  fit: BoxFit.contain,
+                                  child: SvgPicture.asset(
+                                    dayEntry!.isAngel ? 'assets/angel.svg' : 'assets/devil.svg',
+                                    width: iconSize * 0.8,
+                                    height: iconSize * 0.8,
+                                  ),
+                                ),
+                              ),
+                            if (hasDayEntry && hasNightEntry)
+                              SizedBox(width: iconSize * 0.2),
+                            if (hasNightEntry)
+                              SizedBox(
+                                width: iconSize * 0.8,
+                                height: iconSize * 0.8,
+                                child: FittedBox(
+                                  fit: BoxFit.contain,
+                                  child: SvgPicture.asset(
+                                    nightEntry!.isAngel ? 'assets/angel.svg' : 'assets/devil.svg',
+                                    width: iconSize * 0.8,
+                                    height: iconSize * 0.8,
+                                  ),
+                                ),
+                              ),
+                          ],
                         ),
                     ],
                   ),
@@ -929,13 +1159,15 @@ class _CalendarViewBodyState extends State<_CalendarViewBody> with WidgetsBindin
 
 class _DayDetailDialog extends StatefulWidget {
   final DateTime entryDate;
-  final DiaryEntry? existingEntry;
+  final DiaryEntry? dayEntry;
+  final DiaryEntry? nightEntry;
   final void Function(DiaryEntry) onSave;
 
   const _DayDetailDialog({
     super.key,
     required this.entryDate,
-    this.existingEntry,
+    this.dayEntry,
+    this.nightEntry,
     required this.onSave,
   });
 
@@ -943,74 +1175,130 @@ class _DayDetailDialog extends StatefulWidget {
   State<_DayDetailDialog> createState() => _DayDetailDialogState();
 }
 
-class _DayDetailDialogState extends State<_DayDetailDialog> {
-  bool? _currentIsAngel;      // Current selection in the dialog
-  late TextEditingController _controller;
+class _DayDetailDialogState extends State<_DayDetailDialog> with SingleTickerProviderStateMixin {
+  late TabController _tabController;
+  bool? _dayIsAngel;
+  bool? _nightIsAngel;
+  late TextEditingController _dayController;
+  late TextEditingController _nightController;
   
-  // Initial state when dialog opens, to compare for edits
-  bool? _initialIsAngel;
-  String _initialNote = '';
+  // Initial states for comparison
+  bool? _initialDayIsAngel;
+  bool? _initialNightIsAngel;
+  String _initialDayNote = '';
+  String _initialNightNote = '';
   
-  bool _isEdited = false; // Tracks if any change has been made
+  bool _dayIsEdited = false;
+  bool _nightIsEdited = false;
 
   @override
   void initState() {
     super.initState();
-    if (widget.existingEntry != null) {
-      _initialIsAngel = widget.existingEntry!.isAngel;
-      _initialNote = widget.existingEntry!.note;
-    } else {
-      // This is a new entry for a previously unlogged day
-      _initialIsAngel = null;
-      _initialNote = '';
-    }
-    // Initialize current working state from initial state
-    _currentIsAngel = _initialIsAngel;
-    _controller = TextEditingController(text: _initialNote);
-    _controller.addListener(_handleEditState);
-  }
-
-  void _handleEditState() {
-    bool hasSelectionChanged = _currentIsAngel != _initialIsAngel;
-    bool hasNoteChanged = _controller.text != _initialNote;
-    // An edit occurs if selection or note changes. 
-    // For a new entry, just making a selection is an edit.
-    bool newEditedState = (hasSelectionChanged || hasNoteChanged) && (_currentIsAngel != null);
+    // Default to Day tab for today, Night tab for yesterday, Day tab for other dates
+    final today = DateTime.now().dateOnly;
+    final yesterday = today.subtract(const Duration(days: 1));
+    final isToday = widget.entryDate == today;
+    final isYesterday = widget.entryDate == yesterday;
+    final initialIndex = isToday ? 0 : (isYesterday ? 1 : 0); // 0 = Day, 1 = Night
+    _tabController = TabController(length: 2, vsync: this, initialIndex: initialIndex);
     
-    if (_initialIsAngel == null && _currentIsAngel != null && !hasNoteChanged) {
-      // Special case: New entry, first icon click, no note change yet
-      newEditedState = true;
+    // Initialize day entry state
+    if (widget.dayEntry != null) {
+      _initialDayIsAngel = widget.dayEntry!.isAngel;
+      _initialDayNote = widget.dayEntry!.note;
+      _dayIsAngel = _initialDayIsAngel;
+    } else {
+      _initialDayIsAngel = null;
+      _initialDayNote = '';
+      _dayIsAngel = null;
     }
-
-    if (_isEdited != newEditedState) {
-      setState(() {
-        _isEdited = newEditedState;
-      });
+    _dayController = TextEditingController(text: _initialDayNote);
+    _dayController.addListener(() => _handleEditState(true));
+    
+    // Initialize night entry state
+    if (widget.nightEntry != null) {
+      _initialNightIsAngel = widget.nightEntry!.isAngel;
+      _initialNightNote = widget.nightEntry!.note;
+      _nightIsAngel = _initialNightIsAngel;
+    } else {
+      _initialNightIsAngel = null;
+      _initialNightNote = '';
+      _nightIsAngel = null;
     }
+    _nightController = TextEditingController(text: _initialNightNote);
+    _nightController.addListener(() => _handleEditState(false));
+  }
+  
+  @override
+  void dispose() {
+    _tabController.dispose();
+    _dayController.dispose();
+    _nightController.dispose();
+    super.dispose();
   }
 
-  void _handleIconTap(bool newSelection) {
-    if (_currentIsAngel != newSelection) {
-      setState(() {
-        _currentIsAngel = newSelection;
-        _handleEditState();
-      });
+  void _handleEditState(bool isDay) {
+    if (isDay) {
+      bool hasSelectionChanged = _dayIsAngel != _initialDayIsAngel;
+      bool hasNoteChanged = _dayController.text != _initialDayNote;
+      bool newEditedState = (hasSelectionChanged || hasNoteChanged) && (_dayIsAngel != null);
+      
+      if (_initialDayIsAngel == null && _dayIsAngel != null && !hasNoteChanged) {
+        newEditedState = true;
+      }
+
+      if (_dayIsEdited != newEditedState) {
+        setState(() {
+          _dayIsEdited = newEditedState;
+        });
+      }
     } else {
-      // If it's a new entry (initial was null), tapping the same icon again de-selects it.
-      if (_initialIsAngel == null) {
-         setState(() {
-            _currentIsAngel = null;
-            _handleEditState();
+      bool hasSelectionChanged = _nightIsAngel != _initialNightIsAngel;
+      bool hasNoteChanged = _nightController.text != _initialNightNote;
+      bool newEditedState = (hasSelectionChanged || hasNoteChanged) && (_nightIsAngel != null);
+      
+      if (_initialNightIsAngel == null && _nightIsAngel != null && !hasNoteChanged) {
+        newEditedState = true;
+      }
+
+      if (_nightIsEdited != newEditedState) {
+        setState(() {
+          _nightIsEdited = newEditedState;
         });
       }
     }
   }
 
-  @override
-  void dispose() {
-    _controller.removeListener(_handleEditState);
-    _controller.dispose();
-    super.dispose();
+  void _handleIconTap(bool isDay, bool newSelection) {
+    if (isDay) {
+      if (_dayIsAngel != newSelection) {
+        setState(() {
+          _dayIsAngel = newSelection;
+          _handleEditState(true);
+        });
+      } else {
+        if (_initialDayIsAngel == null) {
+          setState(() {
+            _dayIsAngel = null;
+            _handleEditState(true);
+          });
+        }
+      }
+    } else {
+      if (_nightIsAngel != newSelection) {
+        setState(() {
+          _nightIsAngel = newSelection;
+          _handleEditState(false);
+        });
+      } else {
+        if (_initialNightIsAngel == null) {
+          setState(() {
+            _nightIsAngel = null;
+            _handleEditState(false);
+          });
+        }
+      }
+    }
   }
 
   @override
@@ -1018,47 +1306,31 @@ class _DayDetailDialogState extends State<_DayDetailDialog> {
     final isToday = widget.entryDate == DateTime.now().dateOnly;
 
     return AlertDialog(
-      title: Text(
-        // Consider using DateFormat for more robust/localized date formatting
-        '${widget.entryDate.month.toString().padLeft(2, '0')}/${widget.entryDate.day.toString().padLeft(2, '0')}/${widget.entryDate.year}',
-        style: const TextStyle(fontWeight: FontWeight.bold),
+      title: Column(
+        children: [
+          Text(
+            '${widget.entryDate.month.toString().padLeft(2, '0')}/${widget.entryDate.day.toString().padLeft(2, '0')}/${widget.entryDate.year}',
+            style: const TextStyle(fontWeight: FontWeight.bold),
+          ),
+          TabBar(
+            controller: _tabController,
+            labelColor: _AppConstants.primaryColor,
+            unselectedLabelColor: _AppConstants.unselectedNavItemColor,
+            tabs: const [
+              Tab(text: 'Day'),
+              Tab(text: 'Night'),
+            ],
+          ),
+        ],
       ),
       backgroundColor: _AppConstants.scaffoldBackground,
-      content: SingleChildScrollView(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.center,
+      content: SizedBox(
+        width: double.maxFinite,
+        child: TabBarView(
+          controller: _tabController,
           children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                _buildDialogIcon(true), // Angel
-                const SizedBox(width: _AppConstants.spacingMedium),
-                _buildDialogIcon(false), // Devil
-              ],
-            ),
-            const SizedBox(height: _AppConstants.spacingSmall),
-            // Show text only if a selection is made, provide a placeholder for height otherwise
-            _currentIsAngel != null
-                ? Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: _AppConstants.spacingSmall),
-                    child: Text(
-                      getAngelDevilText(_currentIsAngel!, isToday),
-                      softWrap: true,
-                      overflow: TextOverflow.visible,
-                      textAlign: TextAlign.center,
-                    ),
-                  )
-                : const SizedBox(height: 18), // Approx height of one line of text
-            const SizedBox(height: _AppConstants.spacingSmall),
-            TextField(
-              controller: _controller,
-              maxLines: 4,
-              decoration: InputDecoration(
-                border: const OutlineInputBorder(),
-                hintText: isToday ? 'What’s on your mind?' : 'What was on your mind?', // Could be consts
-              ),
-            ),
+            _buildTabContent(true, isToday),
+            _buildTabContent(false, isToday),
           ],
         ),
       ),
@@ -1068,41 +1340,109 @@ class _DayDetailDialogState extends State<_DayDetailDialog> {
           child: const Text('Cancel', style: TextStyle(color: _AppConstants.primaryColor)),
         ),
         TextButton(
-          onPressed: _isEdited && _currentIsAngel != null // Save only if edited and a choice is made
+          onPressed: (_dayIsEdited && _dayIsAngel != null) || (_nightIsEdited && _nightIsAngel != null)
               ? () {
-                  final updatedEntry = DiaryEntry(
-                    date: widget.entryDate,
-                    isAngel: _currentIsAngel!, // Safe because _currentIsAngel != null is checked
-                    note: _controller.text.trim(),
-                  );
-                  widget.onSave(updatedEntry);
+                  // Save day entry if edited
+                  if (_dayIsEdited && _dayIsAngel != null) {
+                    final dayEntry = DiaryEntry(
+                      date: widget.entryDate,
+                      isAngel: _dayIsAngel!,
+                      note: _dayController.text.trim(),
+                      isDay: true,
+                    );
+                    widget.onSave(dayEntry);
+                  }
+                  // Save night entry if edited
+                  if (_nightIsEdited && _nightIsAngel != null) {
+                    final nightEntry = DiaryEntry(
+                      date: widget.entryDate,
+                      isAngel: _nightIsAngel!,
+                      note: _nightController.text.trim(),
+                      isDay: false,
+                    );
+                    widget.onSave(nightEntry);
+                  }
+                  // Close dialog after all saves are complete
+                  Navigator.pop(context);
                 }
               : null,
-          child: Text('Save', style: TextStyle(color: (_isEdited && _currentIsAngel != null) ? _AppConstants.primaryColor : _AppConstants.defaultIconBorder)),
+          child: Text(
+            'Save',
+            style: TextStyle(
+              color: ((_dayIsEdited && _dayIsAngel != null) || (_nightIsEdited && _nightIsAngel != null))
+                  ? _AppConstants.primaryColor
+                  : _AppConstants.defaultIconBorder,
+            ),
+          ),
         ),
       ],
     );
   }
 
-  Widget _buildDialogIcon(bool isAngelChoice) {
-    bool isSelected = _currentIsAngel == isAngelChoice;
+  Widget _buildTabContent(bool isDay, bool isToday) {
+    final isAngel = isDay ? _dayIsAngel : _nightIsAngel;
+    final controller = isDay ? _dayController : _nightController;
+    
+    return SingleChildScrollView(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              _buildDialogIcon(isDay, true), // Angel
+              const SizedBox(width: _AppConstants.spacingMedium),
+              _buildDialogIcon(isDay, false), // Devil
+            ],
+          ),
+          const SizedBox(height: _AppConstants.spacingSmall),
+          isAngel != null
+              ? Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: _AppConstants.spacingSmall),
+                  child: Text(
+                    getAngelDevilText(isAngel, isToday),
+                    softWrap: true,
+                    overflow: TextOverflow.visible,
+                    textAlign: TextAlign.center,
+                  ),
+                )
+              : const SizedBox(height: 18),
+          const SizedBox(height: _AppConstants.spacingSmall),
+          TextField(
+            controller: controller,
+            maxLines: 4,
+            decoration: InputDecoration(
+              border: const OutlineInputBorder(),
+              hintText: isToday ? "What's on your mind?" : "What was on your mind?",
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDialogIcon(bool isDay, bool isAngelChoice) {
+    final currentIsAngel = isDay ? _dayIsAngel : _nightIsAngel;
+    final initialIsAngel = isDay ? _initialDayIsAngel : _initialNightIsAngel;
+    
+    bool isSelected = currentIsAngel == isAngelChoice;
     Color borderColor = _AppConstants.defaultIconBorder;
     if (isSelected) {
       borderColor = isAngelChoice ? _AppConstants.angelIconSelectedBorder : _AppConstants.devilIconSelectedBorder;
-    } else if (_currentIsAngel == null && _initialIsAngel == null) {
-      // For a new entry, unselected icons have a lighter border
+    } else if (currentIsAngel == null && initialIsAngel == null) {
       borderColor = _AppConstants.unselectedNewEntryIconBorder;
     }
 
     return GestureDetector(
-      onTap: () => _handleIconTap(isAngelChoice),
+      onTap: () => _handleIconTap(isDay, isAngelChoice),
       child: Container(
         decoration: BoxDecoration(
           color: isSelected
               ? (isAngelChoice ? _AppConstants.angelIconSelectedBg : _AppConstants.devilIconSelectedBg)
-              : Colors.transparent, // No background if not selected
+              : Colors.transparent,
           border: Border.all(color: borderColor, width: 2),
-          borderRadius: BorderRadius.circular(12), // Could be an _AppConstants value
+          borderRadius: BorderRadius.circular(12),
         ),
         padding: const EdgeInsets.all(_AppConstants.spacingSmall),
         child: SvgPicture.asset(
