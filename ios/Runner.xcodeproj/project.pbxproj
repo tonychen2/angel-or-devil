@@ -491,6 +491,8 @@
 				DEVELOPMENT_TEAM = DRYWZBY525;
 				ENABLE_BITCODE = NO;
 				INFOPLIST_FILE = Runner/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "Angel or Devil";
+				INFOPLIST_KEY_CFBundleName = "Angel or Devil";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.lifestyle";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -680,6 +682,8 @@
 				DEVELOPMENT_TEAM = DRYWZBY525;
 				ENABLE_BITCODE = NO;
 				INFOPLIST_FILE = Runner/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "Angel or Devil";
+				INFOPLIST_KEY_CFBundleName = "Angel or Devil";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.lifestyle";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -708,6 +712,8 @@
 				DEVELOPMENT_TEAM = DRYWZBY525;
 				ENABLE_BITCODE = NO;
 				INFOPLIST_FILE = Runner/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "Angel or Devil";
+				INFOPLIST_KEY_CFBundleName = "Angel or Devil";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.lifestyle";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
