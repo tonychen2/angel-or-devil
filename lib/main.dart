@@ -36,7 +36,7 @@ class _AppConstants {
 
   static const Color calendarAdjacentMonthDayBg = Color(0xFFF3E9D7);
   static const Color calendarTodayCellBg = Color(0xFFEAD7B7);
-  static const Color calendarDefaultCellBg = scaffoldBackground; 
+  static const Color calendarDefaultCellBg = scaffoldBackground;
   static const Color calendarTodayText = Color(0xFF6E2C00);
   static const Color calendarAdjacentMonthBorder = Color(0xFFBCA18A);
   static const Color calendarDefaultText = primaryColor;
@@ -77,7 +77,7 @@ class _AppConstants {
 extension DateTimeExtension on DateTime {
   DateTime get dateOnly => DateTime(year, month, day);
   String get toHiveKey => dateOnly.toIso8601String();
-  
+
   // Get Hive key for day/night entry
   // Night entries (7pm-7am) are stored with the date of the evening (e.g., night of Nov 4 = Nov 4)
   String toHiveKeyForCycle(bool isDay) {
@@ -156,21 +156,21 @@ Future<void> initializeNotifications() async {
           badge: true,
           sound: true,
         );
-    
+
     if (iosPermissionGranted != null) {
       logger.i('iOS notification permission granted: $iosPermissionGranted');
     }
-    
+
     // Also check Android permissions
     final bool? androidPermissionGranted = await flutterLocalNotificationsPlugin
         .resolvePlatformSpecificImplementation<
             AndroidFlutterLocalNotificationsPlugin>()
         ?.requestNotificationsPermission();
-    
+
     if (androidPermissionGranted != null) {
       logger.i('Android notification permission granted: $androidPermissionGranted');
     }
-    
+
     // Fallback to permission_handler for additional checks
     final status = await Permission.notification.status;
     logger.i('Notification permission status (permission_handler): $status');
@@ -237,7 +237,7 @@ Future<void> initializeNotifications() async {
 Future<void> scheduleDailyAngelDevilNotifications() async {
   // Check permission using the plugin's method (more reliable)
   bool hasPermission = false;
-  
+
   try {
     // Check iOS
     final iosImplementation = flutterLocalNotificationsPlugin
@@ -252,7 +252,7 @@ Future<void> scheduleDailyAngelDevilNotifications() async {
       hasPermission = iosPermission ?? false;
       logger.i('iOS notification permission check: $hasPermission');
     }
-    
+
     // Check Android
     final androidImplementation = flutterLocalNotificationsPlugin
         .resolvePlatformSpecificImplementation<
@@ -263,7 +263,7 @@ Future<void> scheduleDailyAngelDevilNotifications() async {
       hasPermission = androidPermission ?? false;
       logger.i('Android notification permission check: $hasPermission');
     }
-    
+
     // Fallback check
     if (!hasPermission) {
       final permissionStatus = await Permission.notification.status;
@@ -273,12 +273,12 @@ Future<void> scheduleDailyAngelDevilNotifications() async {
   } catch (e) {
     logger.e('Error checking notification permission: $e');
   }
-  
+
   if (!hasPermission) {
     logger.w('Notification permission not granted. Notifications will not be scheduled.');
     return;
   }
-  
+
   logger.i('Notification permission confirmed. Proceeding to schedule notifications.');
 
   const AndroidNotificationDetails androidDetails = AndroidNotificationDetails(
@@ -299,7 +299,7 @@ Future<void> scheduleDailyAngelDevilNotifications() async {
 
   // Use timezone-aware current time
   final now = tz.TZDateTime.now(tz.local);
-  
+
   // Cancel all existing notifications (cancel a range of IDs to cover 10 days)
   // Day notifications: IDs 0-9, Night notifications: IDs 10-19
   for (int i = 0; i < 20; i++) {
@@ -319,7 +319,7 @@ Future<void> scheduleDailyAngelDevilNotifications() async {
       now.month,
       now.day,
     ).add(Duration(days: dayOffset));
-    
+
     // Schedule day notification (7 AM) - prompts about last night
     final dayTime = tz.TZDateTime(
       tz.local,
@@ -328,7 +328,7 @@ Future<void> scheduleDailyAngelDevilNotifications() async {
       targetDate.day,
       _AppConstants.dayNotificationHour,
     );
-    
+
     // Only schedule if the time is in the future
     if (dayTime.isAfter(now)) {
       final dayNotificationId = dayOffset; // Use 0-9 for day notifications
@@ -356,7 +356,7 @@ Future<void> scheduleDailyAngelDevilNotifications() async {
       targetDate.day,
       _AppConstants.nightNotificationHour,
     );
-    
+
     // Only schedule if the time is in the future
     if (nightTime.isAfter(now)) {
       final nightNotificationId = 10 + dayOffset; // Use 10-19 for night notifications
@@ -383,43 +383,72 @@ Future<void> scheduleDailyAngelDevilNotifications() async {
 /// Migrate old entries from single-entry-per-day format to day/night format
 /// Old format: key = "2024-11-24T00:00:00.000" (just date), entry has 3 fields (no isDay)
 /// New format: key = "2024-11-24T00:00:00.000_day" or "_night", entry has 4 fields (with isDay)
-/// 
+///
 /// Note: The DiaryEntryAdapter has been modified to read both old (3 fields) and new (4 fields) formats,
 /// so we can read old entries directly without switching adapters.
 Future<void> _migrateOldEntries(Box<DiaryEntry> box) async {
   try {
-    final allKeys = box.keys.toList();
+    // Safely get all keys - this might fail if box is corrupted
+    List<dynamic> allKeys;
+    try {
+      allKeys = box.keys.toList();
+    } catch (e) {
+      logger.e('Failed to get keys from box: $e');
+      // If we can't even get keys, migration can't proceed
+      return;
+    }
+
     final oldFormatKeys = <String>[];
-    
+
     // Find keys that match the old format (no _day or _night suffix)
     for (final key in allKeys) {
-      final keyString = key.toString();
-      if (!keyString.endsWith('_day') && !keyString.endsWith('_night')) {
-        oldFormatKeys.add(keyString);
+      try {
+        final keyString = key.toString();
+        if (!keyString.endsWith('_day') && !keyString.endsWith('_night')) {
+          oldFormatKeys.add(keyString);
+        }
+      } catch (e) {
+        logger.w('Error processing key $key: $e');
+        // Continue with other keys
       }
     }
-    
+
     if (oldFormatKeys.isEmpty) {
       // No old entries to migrate
       logger.i('No old-format entries found to migrate');
       return;
     }
-    
+
     logger.i('Found ${oldFormatKeys.length} old-format entries to migrate');
-    
+
     int migratedCount = 0;
-    
+
     // Read and migrate each old entry
     // The adapter can now read both formats, so we can read old entries directly
     for (final oldKey in oldFormatKeys) {
       try {
         // Try to read the old entry (adapter will handle 3-field format)
-        final oldEntry = box.get(oldKey);
+        // Wrap in try-catch in case reading fails due to corruption
+        DiaryEntry? oldEntry;
+        try {
+          oldEntry = box.get(oldKey);
+        } catch (readError) {
+          logger.e('Failed to read entry $oldKey (may be corrupted): $readError');
+          // Try to delete the corrupted entry
+          try {
+            await box.delete(oldKey);
+            logger.i('Deleted corrupted entry $oldKey');
+          } catch (deleteError) {
+            logger.e('Failed to delete corrupted entry $oldKey: $deleteError');
+          }
+          continue;
+        }
+
         if (oldEntry == null) {
           logger.w('Entry $oldKey is null, skipping');
           continue;
         }
-        
+
         // Parse the date from the key to avoid DST issues
         // The key format is "2024-11-24T00:00:00.000" (ISO8601)
         // Parse it and extract just the date components (year, month, day) to avoid DST problems
@@ -430,7 +459,7 @@ Future<void> _migrateOldEntries(Box<DiaryEntry> box) async {
           // This ensures we use the intended date from the key, not the potentially shifted stored date
           correctDate = DateTime(parsedDate.year, parsedDate.month, parsedDate.day);
           logger.i('Parsed date from key $oldKey: $correctDate (extracted from key to avoid DST bug)');
-          
+
           // Check if the stored date differs from the key date (indicates DST bug)
           if (oldEntry.date.dateOnly != correctDate) {
             logger.w('DST bug detected: stored date ${oldEntry.date.dateOnly} differs from key date $correctDate');
@@ -440,12 +469,12 @@ Future<void> _migrateOldEntries(Box<DiaryEntry> box) async {
           logger.w('Failed to parse date from key $oldKey, using stored date: $parseError');
           correctDate = oldEntry.date.dateOnly;
         }
-        
+
         logger.i('Read old entry $oldKey: storedDate=${oldEntry.date}, correctDate=$correctDate, isAngel=${oldEntry.isAngel}, note=${oldEntry.note}');
-        
+
         // Create new entry with day format using the correct date
         final newKey = correctDate.toHiveKeyForCycle(true); // Default to day
-        
+
         // Check if new key already exists
         if (!box.containsKey(newKey)) {
           // Create new entry with day format using the correct date
@@ -461,7 +490,7 @@ Future<void> _migrateOldEntries(Box<DiaryEntry> box) async {
         } else {
           logger.w('New key $newKey already exists, skipping migration of $oldKey');
         }
-        
+
         // Delete the old entry
         await box.delete(oldKey);
         logger.i('Deleted old entry $oldKey');
@@ -471,7 +500,7 @@ Future<void> _migrateOldEntries(Box<DiaryEntry> box) async {
         // Continue with other entries
       }
     }
-    
+
     logger.i('Migration completed. Migrated $migratedCount of ${oldFormatKeys.length} entries.');
   } catch (e, stackTrace) {
     logger.e('Error during migration: $e');
@@ -498,11 +527,11 @@ Future<void> main() async {
     logger.e('FlutterError: ${details.exception}');
     logger.e('Stack: ${details.stack}');
   };
-  
+
   // Use runZonedGuarded to catch any unhandled async errors
   runZonedGuarded(() async {
     WidgetsFlutterBinding.ensureInitialized();
-    
+
     // Initialize timezones with error handling
     try {
       tzdata.initializeTimeZones();
@@ -522,20 +551,54 @@ Future<void> main() async {
       logger.e('Error initializing timezones: $e');
       // Continue even if timezone initialization fails
     }
-    
+
     // Initialize Hive with better error handling
+    // This MUST complete before starting the app to ensure migration runs first
     try {
       await Hive.initFlutter();
       Hive.registerAdapter(DiaryEntryAdapter());
-      final box = await Hive.openBox<DiaryEntry>(kHiveBoxName);
-      
-      // Migrate old entries from single-entry-per-day format to day/night format
-      // Note: migration may close and reopen the box, so we don't use the box reference after
-      await _migrateOldEntries(box);
-      
-      // Ensure box is open after migration (migration closes/reopens it)
-      if (!Hive.isBoxOpen(kHiveBoxName)) {
-        await Hive.openBox<DiaryEntry>(kHiveBoxName);
+
+      // Try to open the box - this might fail if there are corrupted entries
+      Box<DiaryEntry>? box;
+      try {
+        box = await Hive.openBox<DiaryEntry>(kHiveBoxName);
+        logger.i('Hive box opened successfully');
+      } catch (openError) {
+        logger.e('Failed to open Hive box (may have corrupted entries): $openError');
+        // Try to delete and recreate the box as a last resort
+        try {
+          if (Hive.isBoxOpen(kHiveBoxName)) {
+            await Hive.box<DiaryEntry>(kHiveBoxName).close();
+          }
+          await Hive.deleteBoxFromDisk(kHiveBoxName);
+          logger.w('Deleted corrupted box, will create new one');
+          box = await Hive.openBox<DiaryEntry>(kHiveBoxName);
+        } catch (recoveryError) {
+          logger.e('Failed to recover box: $recoveryError');
+          // Continue without box - app will handle gracefully
+          box = null;
+        }
+      }
+
+      // Migrate old entries if box opened successfully
+      if (box != null) {
+        // Migrate old entries from single-entry-per-day format to day/night format
+        // Note: migration may close and reopen the box, so we don't use the box reference after
+        // This is critical - migration must complete before app starts accessing the box
+        await _migrateOldEntries(box);
+
+        // Ensure box is open after migration (migration doesn't close it, but be safe)
+        if (!Hive.isBoxOpen(kHiveBoxName)) {
+          try {
+            await Hive.openBox<DiaryEntry>(kHiveBoxName);
+          } catch (e) {
+            logger.e('Failed to reopen box after migration: $e');
+          }
+        }
+
+        logger.i('Hive initialization and migration completed successfully');
+      } else {
+        logger.w('Hive box not available, app will continue without it');
       }
     } catch (e, stackTrace) {
       logger.e('Error initializing Hive: $e');
@@ -543,10 +606,11 @@ Future<void> main() async {
       // Don't rethrow - try to continue anyway
       // The app will handle missing Hive box gracefully in _decideInitialScreen
     }
-    
-    // Start the app immediately - don't wait for anything
+
+    // Start the app AFTER Hive initialization and migration complete
+    // This ensures migration runs before any code tries to access the box
     runApp(const AngelDevilApp());
-    
+
     // Initialize notifications asynchronously AFTER app starts
     // This is critical on iOS where permission dialogs can block startup
     // Using a small delay to ensure app is fully started
@@ -597,7 +661,7 @@ class AngelDevilApp extends StatelessWidget {
         fontFamily: GoogleFonts.patrickHand().fontFamily,
         colorScheme: ColorScheme.fromSwatch().copyWith(
           primary: _AppConstants.primaryColor,
-          secondary: _AppConstants.primaryColor, 
+          secondary: _AppConstants.primaryColor,
         ),
       ),
       home: const LaunchDecider(),
@@ -651,7 +715,7 @@ class _LaunchDeciderState extends State<LaunchDecider> with WidgetsBindingObserv
         await Future.delayed(const Duration(milliseconds: 100));
         retries++;
       }
-      
+
       // Ensure Hive box is open before accessing it
       if (!Hive.isBoxOpen(kHiveBoxName)) {
         try {
@@ -669,12 +733,21 @@ class _LaunchDeciderState extends State<LaunchDecider> with WidgetsBindingObserv
           return;
         }
       }
-      
+
       final box = Hive.box<DiaryEntry>(kHiveBoxName);
       final isDay = getCurrentCycleIsDay(); // Entry type we're logging
       final cycleDate = getCurrentCycleDate(); // Date for the entry
       final cycleKey = cycleDate.toHiveKeyForCycle(isDay);
-      final entry = box.get(cycleKey);
+
+      // Safely get entry - wrap in try-catch in case of corruption
+      DiaryEntry? entry;
+      try {
+        entry = box.get(cycleKey);
+      } catch (e) {
+        logger.e('Error reading entry $cycleKey: $e');
+        // If we can't read the entry, treat it as null (no entry exists)
+        entry = null;
+      }
 
       Widget restoredPage = const MainTabView();
 
@@ -720,7 +793,7 @@ class _LaunchDeciderState extends State<LaunchDecider> with WidgetsBindingObserv
     final cycleDate = getCurrentCycleDate(); // Date for the current cycle entry
     final cycleKey = cycleDate.toHiveKeyForCycle(isDay);
     final entry = box.get(cycleKey);
-    
+
     // Show prompt if no entry exists for CURRENT cycle
     // This ensures we always prompt for the current cycle, not past ones
     // Example: If it's after 1PM and last night wasn't logged, we check for today's day entry instead
@@ -850,12 +923,12 @@ class DailyPromptScreen extends StatelessWidget {
     final cycleDate = getCurrentCycleDate(); // This is the date for the entry
     final cycleKey = cycleDate.toHiveKeyForCycle(isDay);
     final entry = box.get(cycleKey);
-    
+
     // Show different text based on current cycle
     // Day cycle (1PM-1AM): logging about today's day
     // Night cycle (1AM-1PM): logging about last night
     final isCurrentlyDay = isCurrentlyDayCycle();
-    final promptText = isCurrentlyDay 
+    final promptText = isCurrentlyDay
         ? 'Was your baby a little angel or a little devil today?'
         : 'Morning! Was your baby a little angel or a little devil last night?';
 
@@ -1269,13 +1342,13 @@ class _CalendarViewBodyState extends State<_CalendarViewBody> with WidgetsBindin
           gridStartDay.day + index,
         ).dateOnly;
         final isCurrentDisplayMonth = date.month == _displayMonth.month;
-        
+
         // Get both day and night entries for this date
         final dayEntry = box.get(date.toHiveKeyForCycle(true));
         final nightEntry = box.get(date.toHiveKeyForCycle(false));
         final hasDayEntry = dayEntry != null;
         final hasNightEntry = nightEntry != null;
-        
+
         final isToday = date == today;
         final isFutureDate = date.isAfter(today);
 
@@ -1405,13 +1478,13 @@ class _DayDetailDialogState extends State<_DayDetailDialog> with SingleTickerPro
   bool? _nightIsAngel;
   late TextEditingController _dayController;
   late TextEditingController _nightController;
-  
+
   // Initial states for comparison
   bool? _initialDayIsAngel;
   bool? _initialNightIsAngel;
   String _initialDayNote = '';
   String _initialNightNote = '';
-  
+
   bool _dayIsEdited = false;
   bool _nightIsEdited = false;
 
@@ -1425,7 +1498,7 @@ class _DayDetailDialogState extends State<_DayDetailDialog> with SingleTickerPro
     final isYesterday = widget.entryDate == yesterday;
     final initialIndex = isToday ? 0 : (isYesterday ? 1 : 0); // 0 = Day, 1 = Night
     _tabController = TabController(length: 2, vsync: this, initialIndex: initialIndex);
-    
+
     // Initialize day entry state
     if (widget.dayEntry != null) {
       _initialDayIsAngel = widget.dayEntry!.isAngel;
@@ -1438,7 +1511,7 @@ class _DayDetailDialogState extends State<_DayDetailDialog> with SingleTickerPro
     }
     _dayController = TextEditingController(text: _initialDayNote);
     _dayController.addListener(() => _handleEditState(true));
-    
+
     // Initialize night entry state
     if (widget.nightEntry != null) {
       _initialNightIsAngel = widget.nightEntry!.isAngel;
@@ -1452,7 +1525,7 @@ class _DayDetailDialogState extends State<_DayDetailDialog> with SingleTickerPro
     _nightController = TextEditingController(text: _initialNightNote);
     _nightController.addListener(() => _handleEditState(false));
   }
-  
+
   @override
   void dispose() {
     _tabController.dispose();
@@ -1466,7 +1539,7 @@ class _DayDetailDialogState extends State<_DayDetailDialog> with SingleTickerPro
       bool hasSelectionChanged = _dayIsAngel != _initialDayIsAngel;
       bool hasNoteChanged = _dayController.text != _initialDayNote;
       bool newEditedState = (hasSelectionChanged || hasNoteChanged) && (_dayIsAngel != null);
-      
+
       if (_initialDayIsAngel == null && _dayIsAngel != null && !hasNoteChanged) {
         newEditedState = true;
       }
@@ -1480,7 +1553,7 @@ class _DayDetailDialogState extends State<_DayDetailDialog> with SingleTickerPro
       bool hasSelectionChanged = _nightIsAngel != _initialNightIsAngel;
       bool hasNoteChanged = _nightController.text != _initialNightNote;
       bool newEditedState = (hasSelectionChanged || hasNoteChanged) && (_nightIsAngel != null);
-      
+
       if (_initialNightIsAngel == null && _nightIsAngel != null && !hasNoteChanged) {
         newEditedState = true;
       }
@@ -1606,7 +1679,7 @@ class _DayDetailDialogState extends State<_DayDetailDialog> with SingleTickerPro
   Widget _buildTabContent(bool isDay, bool isToday) {
     final isAngel = isDay ? _dayIsAngel : _nightIsAngel;
     final controller = isDay ? _dayController : _nightController;
-    
+
     return SingleChildScrollView(
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -1649,7 +1722,7 @@ class _DayDetailDialogState extends State<_DayDetailDialog> with SingleTickerPro
   Widget _buildDialogIcon(bool isDay, bool isAngelChoice) {
     final currentIsAngel = isDay ? _dayIsAngel : _nightIsAngel;
     final initialIsAngel = isDay ? _initialDayIsAngel : _initialNightIsAngel;
-    
+
     bool isSelected = currentIsAngel == isAngelChoice;
     Color borderColor = _AppConstants.defaultIconBorder;
     if (isSelected) {
