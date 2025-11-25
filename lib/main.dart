@@ -531,7 +531,19 @@ Future<void> main() async {
   // Use runZonedGuarded to catch any unhandled async errors
   runZonedGuarded(() async {
     WidgetsFlutterBinding.ensureInitialized();
-
+    
+    // Preload Google Fonts to ensure they're available on Android
+    // This helps prevent font loading issues on Android where fonts might not load on first render
+    try {
+      // Preload the font by accessing it - this triggers the download/cache
+      final fontFamily = GoogleFonts.patrickHand().fontFamily;
+      if (fontFamily != null) {
+        logger.i('Google Fonts font family available: $fontFamily');
+      }
+    } catch (e) {
+      logger.w('Failed to preload Google Fonts: $e. Fonts will load on demand.');
+    }
+    
     // Initialize timezones with error handling
     try {
       tzdata.initializeTimeZones();
